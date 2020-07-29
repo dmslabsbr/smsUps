@@ -1,0 +1,40 @@
+
+
+01001000 - 48
+01001110 - 4e
+00111100 - 3c
+00110111 - 37
+10001101 - 8d - teste Bateria c/beep
+10001100 - 8c - teste bataria s/beep
+00001001 - 09 - normal?
+10001001 - 89 - fora da tomada
+
+                8d  8c  09  89
+BeepLigado      1   1   0   1
+ShutdownAtivo   0   0   0   0
+TesteAtivo      0   0   0   0
+UpsOk           0   0   0   0
+Boost           1   1   1   1
+ByPass          1   1   0   0  on AC POWER
+BateriaBaixa    0   0   0   0
+BateriaLigada   1   0   1   1
+
+
+                    8d  8c  09  89
+beep -               1   0   1  1
+Falha de Bateria -   0   0   0  0 
+Carga da Bateria -   1   1   1  0
+Rede Elétrica -      0   0   1  0
+Pot Saída Elevada -  0   0   0  0
+Teste de Bateria -   1   1   0  1
+
+
+  8d  8c  09  89
+  1   1   0   1     - teste bateria
+  0   0   0   0
+  0   0   0   0
+  0   0   0   0
+  1   1   1   1
+  1   1   0   0
+  0   0   0   0
+  1   0   1   1    - beep
