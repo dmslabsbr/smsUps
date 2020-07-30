@@ -9,6 +9,7 @@ __pycache__/
 # outros
 prot*.xml
 protocolos/
+secrets.ini
 
 # Distribution / packaging
 .Python

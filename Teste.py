@@ -28,9 +28,3 @@ def calc1(s):
 
 
 
-
-print (c2('ff ff ff ff 00'))
-print (c2('54 00 64 00 00'))
-print (c2('54 00 c8 00 00'))
-print (c2('54 01 2C 00 00'))
-print (c2('54 03 84 00 00'))

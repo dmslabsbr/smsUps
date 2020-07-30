@@ -5,6 +5,93 @@ import time
 import struct
 import binascii
 import os
+import paho.mqtt.client as mqtt
+import configparser
+import json
+
+# CONFIG
+SECRETS = 'secrets.ini'
+MQTT_HOST = "mqtt.eclipse.org" 
+MQTT_USERNAME  = ""
+MQTT_PASSWORD  = ""
+MQTT_TOPIC  = "$SYS/#"
+MQTT_PUB = "home/ups"
+PORTA = '/dev/tty.usbserial-1440' # '/dev/ttyUSB0'
+INTERVALO = 5
+ENVIA_JSON = True
+ENVIA_MUITOS = True
+
+# CONST
+CR = '0D'
+
+cmd =[None] * 20
+respostaH = [None] * 18
+
+cmd[1] = "51 ff ff ff ff b3 0d" # pega_dados "Q"
+cmd[2] = "49 ff ff ff ff bb 0d" # retorna nome do no-break - :MNG3 1500 Bi1.2o  "I"
+cmd[3] = "44 ff ff ff ff c0 0d" # para teste de bateria - sem retorno "D"
+cmd[4] = "46 ff ff ff ff be 0d" # caracteristicas  "F" - ;EBiS115000 2460o
+cmd[5] = "47 01 ff ff ff bb 0d" # ? "G"
+cmd[6] = "4d ff ff ff ff b7 0d" # Liga/desliga beep   - sem retorno  "M"        
+cmd[7] = "54 00 10 00 00 9c 0d" # testa bateria por 10 segundos - sem retorno  - "T"
+cmd[8] = "54 00 64 00 00 48 0d" # t 1 minuto
+cmd[9] = "54 00 c8 00 00 e4 0d" # t 2 minutos  
+cmd[9] = "54 01 2c 00 00 7f 0d" # t 3 minutos  
+cmd[9] = "54 03 84 00 00 25 0d" # t 9 minutios  
+cmd[10]= "43 ff ff ff ff c1 0d" # Cancela Teste "C"       
+cmd[11] = "" # teste bateria baixa "L" 
+
+# VARS
+Connected = False #global variable for the state of the connection
+
+
+def get_secrets():
+    ''' GET configuration data '''
+    global MQTT_HOST
+    global MQTT_PASSWORD
+    global MQTT_USERNAME
+    global MQTT_TOPIC
+    global MQTT_PUB
+    global PORTA
+    global INTERVALO
+    global ENVIA_JSON
+    global ENVIA_MUITOS
+    try:
+        from configparser import ConfigParser
+        config = ConfigParser()
+    except ImportError:
+        from ConfigParser import ConfigParser  # ver. < 3.0
+    try:
+        config.read(SECRETS)
+        MQTT_PASSWORD = config.get('secrets', 'MQTT_PASS')
+        MQTT_USERNAME  = config.get('secrets', 'MQTT_USER')
+        MQTT_TOPIC = config.get('secrets', 'MQTT_TOPIC')
+        MQTT_HOST = config.get('secrets', 'MQTT_HOST')
+        MQTT_PUB = config.get('secrets', 'MQTT_PUB')
+        PORTA = config.get('config','PORTA')
+        INTERVALO = config.get('config','INTERVALO')
+        ENVIA_JSON = config.get('config','ENVIA_JSON')
+        ENVIA_MUITOS = config.get('config','ENVIA_MUITOS')
+    except:
+        print ("defalt config")
+
+
+# The callback for when the client receives a CONNACK response from the server.
+def on_connect(client, userdata, flags, rc):
+    print("Connected with result code "+str(rc))
+    if rc == 0:
+        print ("Connected to " + MQTT_HOST)
+        global Connected
+        Connected = True
+        # Subscribing in on_connect() means that if we lose the connection and
+        # reconnect then subscriptions will be renewed.
+        client.subscribe(MQTT_TOPIC)
+    else:
+        print ("Connection failed")
+
+# The callback for when a PUBLISH message is received from the server.
+def on_message(client, userdata, msg):
+    print(msg.topic+" "+str(msg.payload))
 
 
 def send_command(cmd_name, cmd_string):
@@ -21,8 +108,9 @@ def send_command(cmd_name, cmd_string):
     print ("response:", respHex)
     return respHex
 
-''' 8-bit checksum 0x100 '''
+
 def chk(st):
+    ''' 8-bit checksum 0x100 '''
     soma = 0
     xp = st.split()
     for i in xp:
@@ -57,13 +145,15 @@ def trataRetorno(rawData):
     tmp.append(rData[34:36]) #10
     return tmp
 
-''' Para Int 16 '''
+
 def toINT16(valorHex):
+    ''' Para Int 16 '''
     ret = int(valorHex,16)
     return ret
 
-''' Para as variaveis certas '''
+
 def dadosNoBreak(lista):
+    ''' Dados para as variaveis certas '''
     noBreak = {'lastinputVac':0,
         'inputVac':0,
         'outputVac':0,
@@ -107,11 +197,11 @@ def dadosNoBreak(lista):
     noBreak['*BateriaLigada'] = bi[7]
     return noBreak
 
-''' mostra os dados na tela '''
+
 def mostra_dados(dic):
+    ''' mostra os dados na tela '''
     for k,v in dic.items():
         print(k,v)
-
 
 def test(raw):
     lista_dados = trataRetorno(raw)
@@ -120,60 +210,108 @@ def test(raw):
     mostra_dados(ret)
 
 def montaCmd(c1, c2):
+    ''' Monta comando para enviar para o no-break 
+    exemplo: montaCmd('47','ff ff ff ff')
+    '''
+    
     st = c1 + ' ' + c2
     check = chk(st)
     check = check.replace("0x","")
     ret = st + ' ' + check +  ' ' +  CR 
     return ret
 
+def publish_many(topic, dicionario):
+    for key,val in dicionario.items():
+        topi = topic + "/" + key
+        client.publish(topi, str(val))
+        
 
 
-# dados
-
-CR = '0D'
-
-readOut = 0   
-montaCmd('47','ff ff ff ff')
-
-cmd =[None] * 20
-respostaH = [None] * 18
-
-cmd[1] = "51 ff ff ff ff b3 0d" # pega_dados "Q"
-cmd[2] = "49 ff ff ff ff bb 0d" # retorna nome do no-break - :MNG3 1500 Bi1.2o  "I"
-cmd[3] = "44 ff ff ff ff c0 0d" # para teste de bateria - sem retorno "D"
-cmd[4] = "46 ff ff ff ff be 0d" # caracteristicas  "F" - ;EBiS115000 2460o
-cmd[5] = "47 01 ff ff ff bb 0d" # ? "G"
-cmd[6] = "4d ff ff ff ff b7 0d" # Liga/desliga beep   - sem retorno  "M"        
-
-cmd[7] = "54 00 10 00 00 9c 0d" # testa bateria por 10 segundos - sem retorno  - "T"
-
-cmd[8] = "54 00 64 00 00 48 0d" # t 1 minuto
-cmd[9] = "54 00 c8 00 00 e4 0d" # t 2 minutos  
-cmd[9] = "54 01 2c 00 00 7f 0d" # t 3 minutos  
-cmd[9] = "54 03 84 00 00 25 0d" # t 9 minutios  
-
-cmd[10]= "43 ff ff ff ff c1 0d" # Cancela Teste "C"       
-
-cmd[11] = "" # teste bateria baixa "L" 
+# APP START
 
 print("** SMS UPS v.0.1")
+print ("Starting up...")
 
 
-porta = '/dev/tty.usbserial-1440' # '/dev/ttyUSB0'
+get_secrets()
+
+print ("MQTT: " + MQTT_HOST)
+print ("pass: " + MQTT_PASSWORD)
+print ("user: " + MQTT_USERNAME)
+
+
+# MQQT Start
+client = mqtt.Client()
+client.username_pw_set(username=MQTT_USERNAME, password=MQTT_PASSWORD)
+client.on_connect = on_connect
+client.on_message = on_message
+client.connect(MQTT_HOST, 1883, 60)
+client.loop_start()  # start the loop
+
+while not Connected:
+    time.sleep(0.1)  # wait for connection
+
+
 
 try:
-    ser = serial.Serial(porta,
+    ser = serial.Serial(PORTA,
         baudrate=2400,
         parity=serial.PARITY_NONE,
         stopbits=serial.STOPBITS_ONE,
         bytesize=serial.EIGHTBITS,
-        timeout = 1) # ttyACM1 for Arduino board
+        timeout = 1)
+    print ("Porta: " + PORTA + " - " + str(ser.isOpen()))
 except:
-    ser = ""
+    print ("Não consegui abrir a porta serial")
+    if not ser.isOpen(): ser = ""
+
 
 # Time entre a conexao serial e o tempo para escrever (enviar algo)
 time.sleep(1.8) # Entre 1.5s a 2s
 
+
+# loop start
+
+
+while True:
+    x = send_command("query",cmd[1])
+    lista_dados = trataRetorno(x)
+    upsData = dadosNoBreak(lista_dados)
+    print ('---------')
+    print (x)
+    mostra_dados(upsData)
+    if ENVIA_JSON:
+        jsonUPS = json.dumps(upsData)
+        client.publish(MQTT_PUB + "/json", jsonUPS)
+    if ENVIA_MUITOS:
+        publish_many(MQTT_PUB, upsData)
+    time.sleep(INTERVALO)
+
+while 1==2:
+    #ser.write(commandToSend)
+    #send_command("dados", cmd[1])
+
+    time.sleep(1)
+    while True:
+        try:
+            print ("Attempt to Read")
+            #readOut = ser.readline().decode('ascii')
+            response = ser.read(18) # 32
+            print ("response:", binascii.hexlify(bytearray(response)))
+            time.sleep(1)
+            print ("Reading: ", readOut) 
+            break
+        except:
+            pass
+    print ("Restart")
+    ser.flush() #flush the buffer
+    time.sleep(20)
+
+
+# client.loop_forever()
+
+time.sleep(2)
+ser.close()
 
 
 
@@ -213,62 +351,3 @@ ByPass
 BateriaBaixa
 BateriaLigada
 '''
-
-
-
-               
-
-                                    
-
-print ("Starting up...")
-# print (ser.isOpen())
-
-
-test("3d 00 00 00 00 04 7d 00 00 02 58 03 66 01 38 89 bd 0d")
-
-print ('-----')
-test("3d 00 00 08 e0 04 7d 00 00 02 58 03 e8 01 bd 09 4e 0d")
-print ( '  ----   ')
-test("3d 00 00 08 e9 04 86 00 00 02 58 03 e8 01 bd 09 3c 0d")
-
-'''
-Falha de Bateria - 0 
-Carga da Bateria - 1
-Rede Elétrica - 1
-Potência de Saída Elevada - 0 
-Teste de Bateria - 0 
-Alerta 24h - 1
-'''
-
-while 1==2:
-    x = send_command("query",cmd[1])
-    lista_dados = trataRetorno(x)
-    ret = dadosNoBreak(lista_dados)
-    # os.system('cls' if os.name == 'nt' else 'clear')
-    print ('---------')
-    print (x)
-    mostra_dados(ret)
-    time.sleep(5)
-
-while 1==2:
-    #ser.write(commandToSend)
-    #send_command("dados", cmd[1])
-
-    time.sleep(1)
-    while True:
-        try:
-            print ("Attempt to Read")
-            #readOut = ser.readline().decode('ascii')
-            response = ser.read(18) # 32
-            print ("response:", binascii.hexlify(bytearray(response)))
-            time.sleep(1)
-            print ("Reading: ", readOut) 
-            break
-        except:
-            pass
-    print ("Restart")
-    ser.flush() #flush the buffer
-    time.sleep(20)
-
-time.sleep(2)
-ser.close()
