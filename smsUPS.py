@@ -8,6 +8,7 @@ import os
 import paho.mqtt.client as mqtt
 import configparser
 import json
+from datetime import datetime
 
 # CONFIG
 SECRETS = 'secrets.ini'
@@ -20,30 +21,52 @@ PORTA = '/dev/tty.usbserial-1440' # '/dev/ttyUSB0'
 INTERVALO = 5
 ENVIA_JSON = True
 ENVIA_MUITOS = True
+ECHO = True
 
 # CONST
 CR = '0D'
 
-cmd =[None] * 20
 respostaH = [None] * 18
 
-cmd[1] = "51 ff ff ff ff b3 0d" # pega_dados "Q"
-cmd[2] = "49 ff ff ff ff bb 0d" # retorna nome do no-break - :MNG3 1500 Bi1.2o  "I"
-cmd[3] = "44 ff ff ff ff c0 0d" # para teste de bateria - sem retorno "D"
-cmd[4] = "46 ff ff ff ff be 0d" # caracteristicas  "F" - ;EBiS115000 2460o
-cmd[5] = "47 01 ff ff ff bb 0d" # ? "G"
-cmd[6] = "4d ff ff ff ff b7 0d" # Liga/desliga beep   - sem retorno  "M"        
-cmd[7] = "54 00 10 00 00 9c 0d" # testa bateria por 10 segundos - sem retorno  - "T"
-cmd[8] = "54 00 64 00 00 48 0d" # t 1 minuto
-cmd[9] = "54 00 c8 00 00 e4 0d" # t 2 minutos  
-cmd[9] = "54 01 2c 00 00 7f 0d" # t 3 minutos  
-cmd[9] = "54 03 84 00 00 25 0d" # t 9 minutios  
-cmd[10]= "43 ff ff ff ff c1 0d" # Cancela Teste "C"       
-cmd[11] = "" # teste bateria baixa "L" 
+cmd = {'Q':"51 ff ff ff ff b3 0d",  # pega_dados "Q"
+        'I':"49 ff ff ff ff bb 0d", # retorna nome do no-break - :MNG3 1500 Bi1.2o  "I"  
+        'D':"44 ff ff ff ff c0 0d", # para teste de bateria - sem retorno "D"
+        'F':"46 ff ff ff ff be 0d", # caracteristicas  "F" - ;EBiS115000 2460o
+        'G':"47 01 ff ff ff bb 0d", # ? "G"
+        'M':"4d ff ff ff ff b7 0d", # Liga/desliga beep   - sem retorno  "M"
+        'T':"54 00 10 00 00 9c 0d", # testa bateria por 10 segundos - sem retorno  - "T"    
+        'T1':"54 00 64 00 00 48 0d", # t 1 minuto
+        'T2':"54 00 c8 00 00 e4 0d", # t 2 minutos  
+        'T3':"54 01 2c 00 00 7f 0d", # t 3 minutos  
+        'T9':"54 03 84 00 00 25 0d", # t 9 minutos
+        'C':"43 ff ff ff ff c1 0d", # Cancela Teste "C"  - Não cancela o "L"
+        'L':"4C ff ff ff ff" # teste bateria baixa "L" 
+    }
 
 # VARS
 Connected = False #global variable for the state of the connection
 
+noBreakInfo = {'name':'',
+    'info':''} 
+
+noBreak = {'lastinputVac':0,
+    'inputVac':0,
+    'outputVac':0,
+    'outputpower':0,
+    'outputHz':0,
+    'batterylevel':0,
+    'temperatureC':0,
+    'BeepLigado': False,
+    'ShutdownAtivo': False,
+    'TesteAtivo': False,
+    'UpsOk': False,
+    'Boost': False,
+    'ByPass': False,
+    'BateriaBaixa': False,
+    'BateriaLigada': False,
+    'time': "",
+    'info': "",
+    'name': ''}
 
 def get_secrets():
     ''' GET configuration data '''
@@ -56,6 +79,7 @@ def get_secrets():
     global INTERVALO
     global ENVIA_JSON
     global ENVIA_MUITOS
+    global ECHO
     try:
         from configparser import ConfigParser
         config = ConfigParser()
@@ -69,9 +93,10 @@ def get_secrets():
         MQTT_HOST = config.get('secrets', 'MQTT_HOST')
         MQTT_PUB = config.get('secrets', 'MQTT_PUB')
         PORTA = config.get('config','PORTA')
-        INTERVALO = config.get('config','INTERVALO')
+        INTERVALO = int(config.get('config','INTERVALO'))
         ENVIA_JSON = config.get('config','ENVIA_JSON')
         ENVIA_MUITOS = config.get('config','ENVIA_MUITOS')
+        ECHO = config.get('config','ECHO')
     except:
         print ("defalt config")
 
@@ -91,12 +116,37 @@ def on_connect(client, userdata, flags, rc):
 
 # The callback for when a PUBLISH message is received from the server.
 def on_message(client, userdata, msg):
-    print(msg.topic+" "+str(msg.payload))
+    res = json.loads(msg.payload)
+    if ECHO: print(msg.topic+" "+str(msg.payload))
+    v=res['cmd'].upper()
+    if v=='T':
+        send_command("Test",cmd['T'])
+    elif v=="M":
+        send_command("Beep",cmd['M'])
+    elif v=="C":
+        send_command("Cancel",cmd['C'])
+    elif v=="RAW":
+        # envia comando como recebido
+        ret = send_command("Raw",res['val'])
+        if len(ret)>0:
+            client.publish(MQTT_PUB + "/result", str(ret))
+    elif v=="CMD":
+        # envia comando e inclui checksum
+        if len(res['val'])!=0:
+            comando = montaCmd(res['val'])
+            ret = send_command("CMD", comando)
+            if len(ret)>0:
+                client.publish(MQTT_PUB + "/result", str(ret))
+        else:
+            client.publish(MQTT_PUB + "/result", "Invalid command")
+
+    time.sleep(.500)
+    queryQ()
 
 
 def send_command(cmd_name, cmd_string):
-    print ("\ncmd_name:", cmd_name)
-    print ("cmd_string:", cmd_string)
+    if ECHO: print ("\ncmd_name:", cmd_name)
+    if ECHO: print ("cmd_string:", cmd_string)
     cmd_bytes = bytearray.fromhex(cmd_string)
     for cmd_byte in cmd_bytes:
         hex_byte = ("{0:02x}".format(cmd_byte))
@@ -105,7 +155,7 @@ def send_command(cmd_name, cmd_string):
         time.sleep(.100)
     response = ser.read(32)
     respHex = binascii.hexlify(bytearray(response))
-    print ("response:", respHex)
+    if ECHO: print ("response:", respHex)
     return respHex
 
 
@@ -125,13 +175,14 @@ def chk(st):
 
 def trataRetorno(rawData):
     rData = rawData.lower()
+    if len(rData)==0: return None
     if type(rData) is str:  # arruma quando é string
         rData = bytearray.fromhex(rData)
         rData = binascii.hexlify(rData)
     tmp = []
     if rData[0:2] != b'3d':
         print ('Erro na string')
-        exit()
+        return None
     tmp.append(rData[0:2])   # 0
     tmp.append(rData[2:6])   # 1
     tmp.append(rData[6:10])  # 2
@@ -154,22 +205,11 @@ def toINT16(valorHex):
 
 def dadosNoBreak(lista):
     ''' Dados para as variaveis certas '''
-    noBreak = {'lastinputVac':0,
-        'inputVac':0,
-        'outputVac':0,
-        'outputpower':0,
-        'outputHz':0,
-        'batterylevel':0,
-        'temperatureC':0,
-        'BeepLigado': False,
-        'ShutdownAtivo': False,
-        'TesteAtivo': False,
-        'UpsOk': False,
-        'Boost': False,
-        'ByPass': False,
-        'BateriaBaixa': False,
-        'BateriaLigada': False
-         }
+    global noBreak
+    if lista is None:
+        print ("No UPS Data")
+        lista = [0] * 15
+    noBreak['time'] = datetime.today().strftime('%Y-%m-%d %H:%M:%S'),
     noBreak['lastinputVac'] = toINT16(lista[1])/10
     noBreak['inputVac'] = toINT16(lista[2])/10
     noBreak['outputVac'] = toINT16(lista[3])/10
@@ -179,22 +219,16 @@ def dadosNoBreak(lista):
     noBreak['temperatureC'] = toINT16(lista[7])/10
     bi = "{0:08b}".format(toINT16(lista[8]))
     bj = "{0:08b}".format(toINT16(lista[9]))
-    noBreak['BeepLigado'] = bi[0]
-    noBreak['ShutdownAtivo'] = bi[1]
-    noBreak['TesteAtivo'] = bi[2]
-    noBreak['UpsOk'] = bi[3]
-    noBreak['Boost'] = bi[4]
-    noBreak['ByPass'] = bi[5]
-    noBreak['BateriaBaixa'] = bi[6]
-    noBreak['BateriaLigada'] = bi[7]
-    noBreak['*BeepLigado'] = bj[0]
-    noBreak['*ShutdownAtivo'] = bj[1]
-    noBreak['*TesteAtivo'] = bj[2]
-    noBreak['*UpsOk'] = bi[3]
-    noBreak['*Boost'] = bi[4]
-    noBreak['*ByPass'] = bi[5]
-    noBreak['*BateriaBaixa'] = bi[6]
-    noBreak['*BateriaLigada'] = bi[7]
+    noBreak['BeepLigado'] = bi[7]     # Beep Ligado
+    noBreak['ShutdownAtivo'] = bi[6]  # ShutdownAtivo
+    noBreak['TesteAtivo'] = bi[5]     # teste ativo
+    noBreak['UpsOk'] = bi[4]          # upsOK / Vcc na saída
+    noBreak['Boost'] = bi[3]          # Boost / Potência de Saída Elevada
+    noBreak['ByPass'] = bi[2]         # byPass
+    noBreak['BateriaBaixa'] = bi[1]   # Bateria Baixa / Falha de Bateria
+    noBreak['BateriaLigada'] = bi[0]  # Bateria Ligada / em uso
+    noBreak['RedeEletrica'] = "ver"  # Rede Elétrica / Vcc na entrada
+
     return noBreak
 
 
@@ -209,12 +243,12 @@ def test(raw):
     print (raw)
     mostra_dados(ret)
 
-def montaCmd(c1, c2):
+def montaCmd(c1):
     ''' Monta comando para enviar para o no-break 
-    exemplo: montaCmd('47','ff ff ff ff')
+    exemplo: montaCmd('47 ff ff ff ff')
     '''
     
-    st = c1 + ' ' + c2
+    st = c1
     check = chk(st)
     check = check.replace("0x","")
     ret = st + ' ' + check +  ' ' +  CR 
@@ -225,7 +259,35 @@ def publish_many(topic, dicionario):
         topi = topic + "/" + key
         client.publish(topi, str(val))
         
+def hex2Ascii(hexa):
+    res = str(hexa).replace("b'","").replace("'","")
+    res = bytes.fromhex(res).decode('utf-8')
+    return res
 
+def queryQ():
+    ''' get ups data and publish'''
+    global noBreakInfo
+    if len(noBreakInfo['name']) == 0:
+        # get nobreak data
+        res = send_command("Name",cmd['I'])
+        noBreakInfo['name'] = hex2Ascii(res)
+        if noBreakInfo['info'] == '':
+            # get nobreak data
+            res = send_command("Info",cmd['F'])
+            noBreakInfo['info'] = hex2Ascii(res)
+    x = send_command("query",cmd['Q'])
+    lista_dados = trataRetorno(x)
+    upsData = dadosNoBreak(lista_dados)
+    if ECHO:
+        print ('---------')
+        print (x)
+        mostra_dados(upsData)
+    if ENVIA_JSON:
+        jsonUPS = json.dumps(upsData)
+        client.publish(MQTT_PUB + "/json", jsonUPS)
+    if ENVIA_MUITOS:
+        publish_many(MQTT_PUB, upsData)
+    return upsData
 
 # APP START
 
@@ -274,17 +336,7 @@ time.sleep(1.8) # Entre 1.5s a 2s
 
 
 while True:
-    x = send_command("query",cmd[1])
-    lista_dados = trataRetorno(x)
-    upsData = dadosNoBreak(lista_dados)
-    print ('---------')
-    print (x)
-    mostra_dados(upsData)
-    if ENVIA_JSON:
-        jsonUPS = json.dumps(upsData)
-        client.publish(MQTT_PUB + "/json", jsonUPS)
-    if ENVIA_MUITOS:
-        publish_many(MQTT_PUB, upsData)
+    queryQ()
     time.sleep(INTERVALO)
 
 while 1==2:

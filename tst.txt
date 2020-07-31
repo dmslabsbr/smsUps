@@ -9,44 +9,33 @@
 00001001 - 09 - normal?
 10001001 - 89 - fora da tomada
 
-                8d  8c  09  89
-BeepLigado      1   1   0   1
-ShutdownAtivo   0   0   0   0
-TesteAtivo      0   0   0   0
-UpsOk           0   0   0   0
-Boost           1   1   1   1
-ByPass          1   1   0   0  on AC POWER
-BateriaBaixa    0   0   0   0
-BateriaLigada   1   0   1   1
+                8d  8c  09  89                      Correct 
+BeepLigado      1   1   0   1                 1 / Bateria Ligada / em uso
+ShutdownAtivo   0   0   0   0                 2 / Bateria Baixa
+TesteAtivo      0   0   0   0                 3 / byPass
+UpsOk           0   0   0   0                 4 / Boost
+Boost           1   1   1   1                 5 / upsOK
+ByPass          1   1   0   0                 6 / teste ativo
+BateriaBaixa    0   0   0   0                 7 / ShutdownAtivo
+BateriaLigada   1   0   1   1                 8 / Beep Ligado
 
 
                     8d  8c  09  89
-beep -               1   0   1  1
-Falha de Bateria -   0   0   0  0 
-Carga da Bateria -   1   1   1  0
-Rede Elétrica -      0   0   1  0
-Pot Saída Elevada -  0   0   0  0
-Teste de Bateria -   1   1   0  1
+beep -               1   0   1  1   linha 8   
+Falha de Bateria -   0   0   0  0   linha 2
+Carga da Bateria -   1   1   1  0   - entrada energia CALC ?
+Rede Elétrica -      0   0   1  0   - not linha 1
+Pot Saída Elevada -  0   0   0  0   - linha 4
+Teste de Bateria -   1   1   0  1   - bateria em uso/tst  Linha 1
+saida energia        1   1   1  1   - linha 5
 
 
   8d  8c  09  89
-  1   1   0   1     - teste bateria
-  0   0   0   0
-  0   0   0   0
-  0   0   0   0
-  1   1   1   1
-  1   1   0   0
-  0   0   0   0
-  1   0   1   1    - beep
-
-
-
-
-'''
-Falha de Bateria - 0 
-Carga da Bateria - 1
-Rede Elétrica - 1
-Potência de Saída Elevada - 0 
-Teste de Bateria - 0 
-Alerta 24h - 1
-'''
+  1   1   0   1     - beep/carga/tst  - carga/tst                       -beep/tst     bateria em uso/tst
+  0   0   0   0                                                                       bateria Baixa
+  0   0   0   0                                                                       by pass
+  0   0   0   0                                                                       boost
+  1   1   1   1     - beep/carga/tst  - carga/tst   - beep/carga/rede   -beep/tst     Saída Energia/UpsOk
+  1   1   0   0     - beep/carga/tst  - carga/tst                                     tst ativo
+  0   0   0   0                                                                       shut down
+  1   0   1   1     - beep/carga/tst                - beep/carga/rede   -beep/tst     beep
