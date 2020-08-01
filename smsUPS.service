@@ -1,0 +1,12 @@
+[Unit]
+Description=SMS UPS
+After=multi-user.target
+ 
+[Service]
+Type=simple
+WorkingDirectory=/home/pi/smsUps/
+ExecStart=/usr/bin/python3 /home/pi/smsUps/smsUPS.py
+Restart=on-abort
+ 
+[Install]
+WantedBy=multi-user.target
