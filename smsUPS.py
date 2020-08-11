@@ -9,6 +9,7 @@ import paho.mqtt.client as mqtt
 import configparser
 import json
 from datetime import datetime
+from string import Template
 
 # CONFIG
 SECRETS = 'secrets.ini'
@@ -17,14 +18,22 @@ MQTT_USERNAME  = ""
 MQTT_PASSWORD  = ""
 MQTT_TOPIC  = "$SYS/#"
 MQTT_PUB = "home/ups"
+MQTT_HASS = "homeassistant"
 PORTA = '/dev/tty.usbserial-1440' # '/dev/ttyUSB0'
 INTERVALO = 5
 ENVIA_JSON = True
 ENVIA_MUITOS = True
+ENVIA_HASS = True
 ECHO = True
+UPS_NAME='UPS'
+UPS_ID = '01'
 
 # CONST
+VERSAO = '0.2'
 CR = '0D'
+MANUFACTURER = 'dmslabs'
+VIA_DEVICE = 'smsUPS'
+NODE_ID = 'dmslabs'
 
 respostaH = [None] * 18
 
@@ -68,6 +77,42 @@ noBreak = {'lastinputVac':0,
     'info': "",
     'name': ''}
 
+
+json_hass = {"sensor": '''
+{ 
+  "stat_t": "home/ups/json",
+  "name": "$name",
+  "uniq_id": "$uniq_id",
+  "val_tpl": "{{ value_json.$val_tpl }}",
+  "icon": "$icon",
+  "device_class": "$device_class",
+  "device": { $device_dict }
+}''',
+    "binary_sensor": '''
+{ 
+  "stat_t": "home/ups/json",
+  "name": "$name",
+  "uniq_id": "$uniq_id",
+  "val_tpl": "{{ value_json.$val_tpl }}",
+  "device_class": "$device_class",
+  "device": { $device_dict },
+  "pl_on": "$pl_on",
+  "pl_off": "$pl_off",
+  "pl_avail": "$pl_avail",
+  "pl_not_avail": "$pl_not_avail",
+}
+'''}
+
+device_dict = ''' "name": "$device_name",
+    "manufacturer": "$manufacturer",
+    "model": "$model",
+    "sw_version": "$sw_version",
+    "via_device": "$via_device",
+    "identifiers": [ "$identifiers" ] '''
+
+sensor_dic = ""
+
+
 def get_secrets():
     ''' GET configuration data '''
     global MQTT_HOST
@@ -75,11 +120,15 @@ def get_secrets():
     global MQTT_USERNAME
     global MQTT_TOPIC
     global MQTT_PUB
+    global MQTT_HASS
     global PORTA
     global INTERVALO
     global ENVIA_JSON
     global ENVIA_MUITOS
+    global ENVIA_HASS
     global ECHO
+    global UPS_NAME
+    global UPS_ID
     try:
         from configparser import ConfigParser
         config = ConfigParser()
@@ -89,14 +138,20 @@ def get_secrets():
         config.read(SECRETS)
         MQTT_PASSWORD = config.get('secrets', 'MQTT_PASS')
         MQTT_USERNAME  = config.get('secrets', 'MQTT_USER')
-        MQTT_TOPIC = config.get('secrets', 'MQTT_TOPIC')
         MQTT_HOST = config.get('secrets', 'MQTT_HOST')
-        MQTT_PUB = config.get('secrets', 'MQTT_PUB')
+        MQTT_TOPIC = config.get('config', 'MQTT_TOPIC')
+        MQTT_PUB = config.get('config', 'MQTT_PUB')
+        MQTT_HASS = config.get('config', 'MQTT_HASS')
         PORTA = config.get('config','PORTA')
         INTERVALO = int(config.get('config','INTERVALO'))
         ENVIA_JSON = config.get('config','ENVIA_JSON')
         ENVIA_MUITOS = config.get('config','ENVIA_MUITOS')
+        ENVIA_HASS = config.get('config','ENVIA_HASS')
         ECHO = config.get('config','ECHO')
+        UPS_NAME = config.get('device','UPS_NAME') 
+        UPS_ID = config.get('device','UPS_ID') 
+
+        if ENVIA_HASS: ENVIA_JSON = True
     except:
         print ("defalt config")
 
@@ -208,7 +263,7 @@ def dadosNoBreak(lista):
     global noBreak
     if lista is None:
         print ("No UPS Data")
-        lista = [0] * 15
+        lista = ["0"] * 15
     noBreak['time'] = datetime.today().strftime('%Y-%m-%d %H:%M:%S'),
     noBreak['lastinputVac'] = toINT16(lista[1])/10
     noBreak['inputVac'] = toINT16(lista[2])/10
@@ -261,11 +316,13 @@ def publish_many(topic, dicionario):
         
 def hex2Ascii(hexa):
     res = str(hexa).replace("b'","").replace("'","")
-    res = bytes.fromhex(res).decode('utf-8')
+    try:
+        res = bytes.fromhex(res).decode('utf-8')
+    except ValueError:
+        res = ""
     return res
 
-def queryQ():
-    ''' get ups data and publish'''
+def getNoBreakInfo():
     global noBreakInfo
     if len(noBreakInfo['name']) == 0:
         # get nobreak data
@@ -275,6 +332,12 @@ def queryQ():
             # get nobreak data
             res = send_command("Info",cmd['F'])
             noBreakInfo['info'] = hex2Ascii(res)
+        if len(noBreakInfo['name'])+len(noBreakInfo['name'])<5:
+            noBreakInfo['name'] = UPS_NAME
+            noBreakInfo['info'] = 'no info'
+
+def queryQ():
+    ''' get ups data and publish'''
     x = send_command("query",cmd['Q'])
     lista_dados = trataRetorno(x)
     upsData = dadosNoBreak(lista_dados)
@@ -289,18 +352,64 @@ def queryQ():
         publish_many(MQTT_PUB, upsData)
     return upsData
 
+def json_remove_vazio(strJson):
+    ''' remove linhas / elementos vazios de uma string Json '''
+    dados = json.loads(strJson)  # converte string para dict
+    cp_dados = json.loads(strJson) # cria uma copia
+    for k,v in dados.items():
+        if len(v) == 0:
+            cp_dados.pop(k)  # remove vazio
+    return json.dumps(cp_dados) # converte dict para json
+
+def send_hass():
+    ''' Envia parametros para incluir device no hass.io '''
+    global sensor_dic
+    component = "sensor"
+
+    # var comuns
+    varComuns = {'sw_version': VERSAO,
+                 'model': noBreakInfo['info'],
+                 'manufacturer': MANUFACTURER,
+                 'device_name': noBreakInfo['name'],
+                 'identifiers': noBreakInfo['name'] + "_" + UPS_ID,
+                 'via_device': VIA_DEVICE,
+                 'uniq_id': UPS_ID}
+    if sensor_dic == "":
+        json_file = open('sensor.json')
+        json_str = json_file.read()
+        sensor_dic = json.loads(json_str)
+    key_todos = sensor_dic['todos']
+    sensor_dic.pop('todos')
+    for key,dic in sensor_dic.items():
+        print(key,dic)
+        varComuns['uniq_id']=varComuns['identifiers']+"_" + key
+        dic['val_tpl']=dic['name']
+        dic['name']=varComuns['uniq_id']
+        dic['device_dict'] = device_dict
+        dados = Template(json_hass[component]) # sensor
+        dados = Template(dados.safe_substitute(dic))
+        dados = Template(dados.safe_substitute(varComuns)) # faz ultimas substituições
+        dados = dados.safe_substitute(key_todos) # remove os não substituidos.
+        topico = MQTT_HASS + "/" + component + "/" + NODE_ID + "/" + varComuns['uniq_id'] + "/config"
+        print(topico)
+        print(dados)
+        dados = json_remove_vazio(dados)
+        client.publish(topico, dados)
+
+
 # APP START
 
-print("** SMS UPS v.0.1")
+print("** SMS UPS v." + VERSAO)
 print ("Starting up...")
 
 
 get_secrets()
 
+'''
 print ("MQTT: " + MQTT_HOST)
 print ("pass: " + MQTT_PASSWORD)
 print ("user: " + MQTT_USERNAME)
-
+'''
 
 # MQQT Start
 client = mqtt.Client()
@@ -312,8 +421,6 @@ client.loop_start()  # start the loop
 
 while not Connected:
     time.sleep(0.1)  # wait for connection
-
-
 
 try:
     ser = serial.Serial(PORTA,
@@ -332,9 +439,11 @@ except:
 time.sleep(1.8) # Entre 1.5s a 2s
 
 
+if ENVIA_HASS:
+    getNoBreakInfo()
+    send_hass()
+
 # loop start
-
-
 while True:
     queryQ()
     time.sleep(INTERVALO)

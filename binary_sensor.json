@@ -1,0 +1,65 @@
+{
+    "BeepLigado":{
+       "name":"BeepLigado",
+       "pl_on": "1",
+       "pl_off": "0",
+       "pl_avail": "1",
+       "pl_not_avail": "0"
+    },
+    "ShutdownAtivo":{
+       "name":"ShutdownAtivo",
+       "pl_on": "1",
+       "pl_off": "0",
+       "pl_avail": "1",
+       "pl_not_avail": "0"
+    },
+    "TesteAtivo":{
+       "name":"TesteAtivo",
+       "pl_on": "1",
+       "pl_off": "0",
+       "pl_avail": "1",
+       "pl_not_avail": "0"
+    },
+    "UpsOk":{
+       "name":"UpsOk",
+       "pl_on": "1",
+       "pl_off": "0",
+       "pl_avail": "1",
+       "pl_not_avail": "0"
+    },
+    "Boost":{
+       "name":"Boost",
+       "pl_on": "1",
+       "pl_off": "0",
+       "pl_avail": "1",
+       "pl_not_avail": "0"
+    },
+    "ByPass":{
+       "name":"ByPass",
+       "pl_on": "1",
+       "pl_off": "0",
+       "pl_avail": "1",
+       "pl_not_avail": "0"
+    },
+    "BateriaBaixa":{
+       "name":"BateriaBaixa",
+       "pl_on": "1",
+       "pl_off": "0",
+       "pl_avail": "1",
+       "pl_not_avail": "0"
+    },
+    "BateriaLigada":{
+       "name":"BateriaLigada",
+       "pl_on": "1",
+       "pl_off": "0",
+       "pl_avail": "1",
+       "pl_not_avail": "0"
+    },
+    "todos":{
+       "name":"",
+       "pl_on": "",
+       "pl_off": "",
+       "pl_avail": "",
+       "pl_not_avail": ""
+    }
+ }

@@ -1,0 +1,29 @@
+{
+   "inputVac":{
+      "name":"inputVac",
+      "device_class":"power"
+   },
+   "outputVac":{
+      "name":"outputVac",
+      "device_class":"power"
+   },
+   "outputHz":{
+      "name":"outputHz",
+      "icon":"mdi:power-socket",
+      "unit_of_measurement":"Hz"
+   },
+   "batterylevel":{
+      "name":"batterylevel",
+      "device_class":"battery"
+   },
+   "temperatureC":{
+      "name":"temperatureC",
+      "device_class":"temperature"
+   },
+   "todos":{ 
+       "name":"",
+       "device_class":"",
+       "icon":"",
+       "unit_of_measurement":""
+   }
+}
