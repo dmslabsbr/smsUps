@@ -2,10 +2,17 @@
 Application to read data from SMS BRASIL UPS
 
 
-You need to install https://github.com/eclipse/paho.mqtt.python 
+Before run you need to install:
+   https://github.com/eclipse/paho.mqtt.python 
 
 
-sudo pip3 install pyserial
+git clone https://github.com/dmslabsbr/smsUps.git
+cd smsUps
+python3 -m venv ./smsUps/
+source ./bin/activate
+pip3 install paho-mqtt
+pip3 install pyserial
+
 
 ls /dev/tty*
 
@@ -25,3 +32,28 @@ sudo chmod +x /home/pi/smsUps/smsUPS.py
 sudo systemctl daemon-reload
 sudo systemctl enable smsUPS.service
 sudo systemctl start smsUPS.service
+sudo systemctl status smsUPS.service
+
+
+
+Commands
+
+Send json to /home/ups/cmd
+{
+   "cmd": "",
+   "val": ""
+}
+
+{cmd: "T", val: ""}  - testa bateria por 10 segundos - sem retorno  - "T"
+{cmd: "M", val: ""}  - # Liga/desliga beep   - sem retorno  "M"
+{cmd: "C", val: ""} - Cancela Teste "C"  - Não cancela o "L"
+{cmd: "RAW", val: ""} - Envia para o nobreak os dados em val
+   ex: {
+         "cmd": "RAW",
+         "val": "49ffffffffbb0d"
+       }
+{cmd: "CMD", val: ""} - Envia para o nobreak os dados em val e completa com o checksum
+   ex: {
+         "cmd": "CMD",
+         "val": "49ffffffff"
+       }

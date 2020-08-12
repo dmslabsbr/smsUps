@@ -21,16 +21,19 @@ MQTT_PUB = "home/ups"
 MQTT_HASS = "homeassistant"
 PORTA = '/dev/tty.usbserial-1440' # '/dev/ttyUSB0'
 INTERVALO = 30
-INTERVALO_DISCOVERY = 120
+INTERVALO_DISCOVERY = 600
 ENVIA_JSON = True
 ENVIA_MUITOS = True
 ENVIA_HASS = True
 ECHO = True
 UPS_NAME='UPS'
 UPS_ID = '01'
+SMSUPS_SERVER = True
+SMSUPS_CLIENTE = True
+
 
 # CONST
-VERSAO = '0.2'
+VERSAO = '0.3'
 CR = '0D'
 MANUFACTURER = 'dmslabs'
 VIA_DEVICE = 'smsUPS'
@@ -55,6 +58,8 @@ cmd = {'Q':"51 ff ff ff ff b3 0d",  # pega_dados "Q"
 
 # VARS
 Connected = False #global variable for the state of the connection
+devices_enviados = False  # Global - Controla quando enviar novamente o cabeçalho para autodiscovery
+serialOk = False
 
 noBreakInfo = {'name':'',
     'info':''} 
@@ -146,6 +151,9 @@ def get_secrets():
     global ECHO
     global UPS_NAME
     global UPS_ID
+    global SMSUPS_SERVER
+    global SMSUPS_CLIENTE
+    print ("Getting config file.")
     try:
         from configparser import ConfigParser
         config = ConfigParser()
@@ -168,24 +176,48 @@ def get_secrets():
         ECHO = config.get('config','ECHO')
         UPS_NAME = config.get('device','UPS_NAME') 
         UPS_ID = config.get('device','UPS_ID') 
+        SMSUPS_SERVER = str(config.get('config', 'SMSUPS_SERVER'))
+        SMSUPS_CLIENTE = config.get('config', 'SMSUPS_CLIENTE')
 
         if ENVIA_HASS: ENVIA_JSON = True
     except:
         print ("defalt config")
 
-
 # The callback for when the client receives a CONNACK response from the server.
 def on_connect(client, userdata, flags, rc):
+    global Connected
     print("Connected with result code "+str(rc))
     if rc == 0:
         print ("Connected to " + MQTT_HOST)
-        global Connected
         Connected = True
+        client.connected_flag=True
         # Subscribing in on_connect() means that if we lose the connection and
         # reconnect then subscriptions will be renewed.
         client.subscribe(MQTT_TOPIC)
     else:
-        print ("Connection failed")
+        tp_c = {0: "Connection successful",
+                1: "Connection refused – incorrect protocol version",
+                2: "Connection refused – invalid client identifier",
+                3: "Connection refused – server unavailable",
+                4: "Connection refused – bad username or password",
+                5: "Connection refused – not authorised",
+                100: "Connection refused - other things"
+        }
+        Connected = False
+        if rc>5: rc=100
+        print (rc + tp_c[rc])
+        # tratar quando for 3 e outros
+
+
+def on_disconnect(client, userdata, rc):
+    global Connected
+    global devices_enviados
+    Connected = False
+    #logging.info("disconnecting reason  "  +str(rc))
+    print("disconnecting reason  "  +str(rc))
+    client.connected_flag=False
+    client.disconnect_flag=True
+    devices_enviados = False # Force sending again
 
 # The callback for when a PUBLISH message is received from the server.
 def on_message(client, userdata, msg):
@@ -220,17 +252,20 @@ def on_message(client, userdata, msg):
 
 
 def send_command(cmd_name, cmd_string):
-    if ECHO: print ("\ncmd_name:", cmd_name)
-    if ECHO: print ("cmd_string:", cmd_string)
-    cmd_bytes = bytearray.fromhex(cmd_string)
-    for cmd_byte in cmd_bytes:
-        hex_byte = ("{0:02x}".format(cmd_byte))
-        #print (hex_byte)
-        ser.write(bytearray.fromhex(hex_byte))
-        time.sleep(.100)
-    response = ser.read(32)
-    respHex = binascii.hexlify(bytearray(response))
-    if ECHO: print ("response:", respHex)
+    ''' envia um comando para o nobreak '''
+    respHex = ""
+    if serialOk:
+        if ECHO: print ("\ncmd_name:", cmd_name)
+        if ECHO: print ("cmd_string:", cmd_string)
+        cmd_bytes = bytearray.fromhex(cmd_string)
+        for cmd_byte in cmd_bytes:
+            hex_byte = ("{0:02x}".format(cmd_byte))
+            #print (hex_byte)
+            ser.write(bytearray.fromhex(hex_byte))
+            time.sleep(.100)
+        response = ser.read(32)
+        respHex = binascii.hexlify(bytearray(response))
+        if ECHO: print ("response:", respHex)
     return respHex
 
 
@@ -283,7 +318,16 @@ def dadosNoBreak(lista):
     global noBreak
     if lista is None:
         print ("No UPS Data")
-        lista = ["0"] * 15
+        lista = ["1"] * 15
+        lista[1] = "0"
+        lista[2] = "0"
+        lista[3] = "0"
+        lista[4] = "0"
+        lista[5] = "0"
+        lista[6] = "0"
+        lista[7] = "0"
+        lista[8] = "FF"
+        lista[9] = "FF"
     noBreak['time'] = datetime.today().strftime('%Y-%m-%d %H:%M:%S'),
     noBreak['lastinputVac'] = toINT16(lista[1])/10
     noBreak['inputVac'] = toINT16(lista[2])/10
@@ -293,7 +337,7 @@ def dadosNoBreak(lista):
     noBreak['batterylevel'] = toINT16(lista[6])/10
     noBreak['temperatureC'] = toINT16(lista[7])/10
     bi = "{0:08b}".format(toINT16(lista[8]))
-    bj = "{0:08b}".format(toINT16(lista[9]))
+    # bj = "{0:08b}".format(toINT16(lista[9]))
     noBreak['BeepLigado'] = bi[7]     # Beep Ligado
     noBreak['ShutdownAtivo'] = bi[6]  # ShutdownAtivo
     noBreak['TesteAtivo'] = bi[5]     # teste ativo
@@ -406,6 +450,7 @@ def monta_publica_topico(component, sDict, varComuns):
 def send_hass():
     ''' Envia parametros para incluir device no hass.io '''
     global sensor_dic
+    global devices_enviados
 
     # var comuns
     varComuns = {'sw_version': VERSAO,
@@ -426,7 +471,26 @@ def send_hass():
     #sensor_dic.pop('todos')
     print('Componente:' + k)
     monta_publica_topico(k, sensor_dic[k], varComuns)
+    devices_enviados = True
 
+def abre_serial():
+    ''' abre a porta serial '''
+    global ser
+    global serialOk
+    try:
+        ser = serial.Serial(PORTA,
+            baudrate=2400,
+            parity=serial.PARITY_NONE,
+            stopbits=serial.STOPBITS_ONE,
+            bytesize=serial.EIGHTBITS,
+            timeout = 1)
+        print ("Porta: " + PORTA + " - " + str(ser.isOpen()))
+    except:
+        print ("I was unable to open the serial port ", PORTA)
+        serialOk = False
+        if SMSUPS_SERVER and not SMSUPS_CLIENTE:
+            print ("I'm going to stop the program.")
+            raise SystemExit(0)
 
 # APP START
 
@@ -436,68 +500,43 @@ print ("Starting up...")
 
 get_secrets()
 
-'''
-print ("MQTT: " + MQTT_HOST)
-print ("pass: " + MQTT_PASSWORD)
-print ("user: " + MQTT_USERNAME)
-'''
-
 # MQQT Start
 client = mqtt.Client()
 client.username_pw_set(username=MQTT_USERNAME, password=MQTT_PASSWORD)
 client.on_connect = on_connect
 client.on_message = on_message
+client.on_disconnect = on_disconnect
 client.connect(MQTT_HOST, 1883, 60)
 client.loop_start()  # start the loop
 
 while not Connected:
-    time.sleep(0.1)  # wait for connection
+    time.sleep(1)  # wait for connection
 
-try:
-    ser = serial.Serial(PORTA,
-        baudrate=2400,
-        parity=serial.PARITY_NONE,
-        stopbits=serial.STOPBITS_ONE,
-        bytesize=serial.EIGHTBITS,
-        timeout = 1)
-    print ("Porta: " + PORTA + " - " + str(ser.isOpen()))
-except:
-    print ("Não consegui abrir a porta serial")
-    if not ser.isOpen(): ser = ""
+serialOk = False
+
+if not serialOk:
+    abre_serial()
 
 
 # Time entre a conexao serial e o tempo para escrever (enviar algo)
 time.sleep(1.8) # Entre 1.5s a 2s
 
+getNoBreakInfo()
 
 if ENVIA_HASS:
-    getNoBreakInfo()
     send_hass()
 
 # loop start
 while True:
     queryQ()
     time.sleep(INTERVALO)
+    if ENVIA_HASS:
+        if devices_enviados and Connected and SMSUPS_SERVER:
+            send_hass
+    if SMSUPS_SERVER:
+        if not serialOk:
+            abre_serial()
 
-while 1==2:
-    #ser.write(commandToSend)
-    #send_command("dados", cmd[1])
-
-    time.sleep(1)
-    while True:
-        try:
-            print ("Attempt to Read")
-            #readOut = ser.readline().decode('ascii')
-            response = ser.read(18) # 32
-            print ("response:", binascii.hexlify(bytearray(response)))
-            time.sleep(1)
-            print ("Reading: ", readOut) 
-            break
-        except:
-            pass
-    print ("Restart")
-    ser.flush() #flush the buffer
-    time.sleep(20)
 
 
 # client.loop_forever()
