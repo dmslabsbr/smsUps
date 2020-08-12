@@ -8,8 +8,10 @@ import os
 import paho.mqtt.client as mqtt
 import configparser
 import json
+import logging
 from datetime import datetime
 from string import Template
+
 
 # CONFIG
 SECRETS = 'secrets.ini'
@@ -30,6 +32,9 @@ UPS_NAME='UPS'
 UPS_ID = '01'
 SMSUPS_SERVER = True
 SMSUPS_CLIENTE = True
+LOG_FILE = '/var/tmp/smsUPS.log'
+
+LOG_LEVEL = logging.DEBUG
 
 
 # CONST
@@ -153,7 +158,9 @@ def get_secrets():
     global UPS_ID
     global SMSUPS_SERVER
     global SMSUPS_CLIENTE
+    global LOG_FILE
     print ("Getting config file.")
+    log.debug("Getting config file.")
     try:
         from configparser import ConfigParser
         config = ConfigParser()
@@ -178,15 +185,18 @@ def get_secrets():
         UPS_ID = config.get('device','UPS_ID') 
         SMSUPS_SERVER = str(config.get('config', 'SMSUPS_SERVER'))
         SMSUPS_CLIENTE = config.get('config', 'SMSUPS_CLIENTE')
+        LOG_FILE = config.get('config', 'LOG_FILE')
 
         if ENVIA_HASS: ENVIA_JSON = True
     except:
+        log.warning("Can't load config. Using default config.")
         print ("defalt config")
 
 # The callback for when the client receives a CONNACK response from the server.
 def on_connect(client, userdata, flags, rc):
     global Connected
     print("Connected with result code "+str(rc))
+    log.debug("Connected with result code "+str(rc))
     if rc == 0:
         print ("Connected to " + MQTT_HOST)
         Connected = True
@@ -206,14 +216,14 @@ def on_connect(client, userdata, flags, rc):
         Connected = False
         if rc>5: rc=100
         print (rc + tp_c[rc])
+        log.error(rc + tp_c[rc])
         # tratar quando for 3 e outros
-
 
 def on_disconnect(client, userdata, rc):
     global Connected
     global devices_enviados
     Connected = False
-    #logging.info("disconnecting reason  "  +str(rc))
+    log.info("disconnecting reason  "  +str(rc))
     print("disconnecting reason  "  +str(rc))
     client.connected_flag=False
     client.disconnect_flag=True
@@ -225,6 +235,7 @@ def on_message(client, userdata, msg):
     if ECHO: 
         print(msg.topic+" "+str(msg.payload))
         print(res)
+    log.debug("on_message:" + msg.topic + str(msg.payload))
     v=res['cmd'].upper()
     if v=='T':
         send_command("Test",cmd['T'])
@@ -236,6 +247,7 @@ def on_message(client, userdata, msg):
         # envia comando como recebido
         ret = send_command("Raw",res['val'])
         if len(ret)>0:
+            log.debug("publish: " + MQTT_PUB + "/result : " + str(ret))
             client.publish(MQTT_PUB + "/result", str(ret))
     elif v=="CMD":
         # envia comando e inclui checksum
@@ -243,8 +255,10 @@ def on_message(client, userdata, msg):
             comando = montaCmd(res['val'])
             ret = send_command("CMD", comando)
             if len(ret)>0:
+                log.debug("publish: " + MQTT_PUB + "/result : " + str(ret))
                 client.publish(MQTT_PUB + "/result", str(ret))
         else:
+            log.debug("publish: " + MQTT_PUB + "/result : Invalid command")
             client.publish(MQTT_PUB + "/result", "Invalid command")
 
     time.sleep(.500)
@@ -257,6 +271,7 @@ def send_command(cmd_name, cmd_string):
     if serialOk:
         if ECHO: print ("\ncmd_name:", cmd_name)
         if ECHO: print ("cmd_string:", cmd_string)
+        log.debug ("cmd:" + cmd_name + " / str: " + cmd_string)
         cmd_bytes = bytearray.fromhex(cmd_string)
         for cmd_byte in cmd_bytes:
             hex_byte = ("{0:02x}".format(cmd_byte))
@@ -266,6 +281,7 @@ def send_command(cmd_name, cmd_string):
         response = ser.read(32)
         respHex = binascii.hexlify(bytearray(response))
         if ECHO: print ("response:", respHex)
+        log.debug ("response: " + respHex)
     return respHex
 
 
@@ -292,6 +308,7 @@ def trataRetorno(rawData):
     tmp = []
     if rData[0:2] != b'3d':
         print ('Erro na string')
+        log.debug('String error!')
         return None
     tmp.append(rData[0:2])   # 0
     tmp.append(rData[2:6])   # 1
@@ -444,6 +461,7 @@ def monta_publica_topico(component, sDict, varComuns):
         print(topico)
         print(dados)
         dados = json_remove_vazio(dados)
+        log.debug ("topico: " + topico)
         client.publish(topico, dados)
 
 
@@ -462,15 +480,15 @@ def send_hass():
                  'uniq_id': UPS_ID}
     
     if len(sensor_dic) == 0:
-        for k,v in json_hass.items():
-            json_file = open(k + '.json')
+        for k in json_hass.items():
+            json_file = open(k[0] + '.json')
             json_str = json_file.read()
-            sensor_dic[k] = json.loads(json_str)
+            sensor_dic[k[0]] = json.loads(json_str)
 
-    #key_todos = sensor_dic['todos']
-    #sensor_dic.pop('todos')
-    print('Componente:' + k)
-    monta_publica_topico(k, sensor_dic[k], varComuns)
+    for k in sensor_dic.items():
+        print('Componente:' + k[0])
+        monta_publica_topico(k[0], sensor_dic[k[0]], varComuns)
+        
     devices_enviados = True
 
 def abre_serial():
@@ -485,11 +503,13 @@ def abre_serial():
             bytesize=serial.EIGHTBITS,
             timeout = 1)
         print ("Porta: " + PORTA + " - " + str(ser.isOpen()))
+        log.debug ("Port " + PORTA + " - is open: " + str(ser.isOpen()))
     except:
         print ("I was unable to open the serial port ", PORTA)
         serialOk = False
         if SMSUPS_SERVER and not SMSUPS_CLIENTE:
             print ("I'm going to stop the program.")
+            log.critical ("I'm going to stop the program.")
             raise SystemExit(0)
 
 # APP START
@@ -497,10 +517,21 @@ def abre_serial():
 print("** SMS UPS v." + VERSAO)
 print ("Starting up...")
 
+#LOG
+log = logging.getLogger('smsUPS')
+hdlr = logging.FileHandler(LOG_FILE)
+formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s')
+hdlr.setFormatter(formatter)
+log.addHandler(hdlr) 
+log.setLevel(LOG_LEVEL)
+
+log.debug("** SMS UPS v." + VERSAO)
+log.debug("Starting up...")
 
 get_secrets()
 
 # MQQT Start
+log.info("Starting MQQT " + MQTT_HOST)
 client = mqtt.Client()
 client.username_pw_set(username=MQTT_USERNAME, password=MQTT_PASSWORD)
 client.on_connect = on_connect
@@ -508,6 +539,8 @@ client.on_message = on_message
 client.on_disconnect = on_disconnect
 client.connect(MQTT_HOST, 1883, 60)
 client.loop_start()  # start the loop
+log.info("MQQT OK")
+
 
 while not Connected:
     time.sleep(1)  # wait for connection

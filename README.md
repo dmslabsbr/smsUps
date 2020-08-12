@@ -57,3 +57,32 @@ Send json to /home/ups/cmd
          "cmd": "CMD",
          "val": "49ffffffff"
        }
+
+
+
+secrets.ini file
+
+You should create your own secrets.ini file. Like this:
+
+[secrets]
+MQTT_HOST = 192.168.50.21
+MQTT_USER = your_mqqt_user
+MQTT_PASS = your_mqqt_file
+
+[config]
+PORTA = /dev/tty.usbserial-1440
+INTERVALO = 60
+INTERVALO_HASS = 120
+ENVIA_JSON = True
+ENVIA_MUITOS = True
+ENVIA_HASS = True
+ECHO = True
+MQTT_TOPIC = home/ups/cmd
+MQTT_PUB = home/ups
+MQTT_HASS = homeassistant
+LOG_FILE = '/var/tmp/smsUPS.log'
+
+
+[device]
+UPS_NAME = SMS
+UPS_ID = 01
