@@ -20,7 +20,8 @@ MQTT_TOPIC  = "$SYS/#"
 MQTT_PUB = "home/ups"
 MQTT_HASS = "homeassistant"
 PORTA = '/dev/tty.usbserial-1440' # '/dev/ttyUSB0'
-INTERVALO = 5
+INTERVALO = 30
+INTERVALO_DISCOVERY = 120
 ENVIA_JSON = True
 ENVIA_MUITOS = True
 ENVIA_HASS = True
@@ -99,7 +100,22 @@ json_hass = {"sensor": '''
   "pl_on": "$pl_on",
   "pl_off": "$pl_off",
   "pl_avail": "$pl_avail",
+  "pl_not_avail": "$pl_not_avail"
+}
+''',
+    "switch": '''
+{ 
+  "stat_t": "home/ups/json",
+  "name": "$name",
+  "cmd_t":"$cmd_t",
+  "uniq_id": "$uniq_id",
+  "val_tpl": "$val_tpl",
+  "device": { $device_dict },
+  "pl_on": "$pl_on",
+  "pl_off": "$pl_off",
+  "pl_avail": "$pl_avail",
   "pl_not_avail": "$pl_not_avail",
+  "qos": "0"
 }
 '''}
 
@@ -110,7 +126,7 @@ device_dict = ''' "name": "$device_name",
     "via_device": "$via_device",
     "identifiers": [ "$identifiers" ] '''
 
-sensor_dic = ""
+sensor_dic = dict() # {}
 
 
 def get_secrets():
@@ -123,6 +139,7 @@ def get_secrets():
     global MQTT_HASS
     global PORTA
     global INTERVALO
+    global INTERVALO_HASS
     global ENVIA_JSON
     global ENVIA_MUITOS
     global ENVIA_HASS
@@ -144,6 +161,7 @@ def get_secrets():
         MQTT_HASS = config.get('config', 'MQTT_HASS')
         PORTA = config.get('config','PORTA')
         INTERVALO = int(config.get('config','INTERVALO'))
+        INTERVALO_HASS = int(config.get('config','INTERVALO_HASS'))
         ENVIA_JSON = config.get('config','ENVIA_JSON')
         ENVIA_MUITOS = config.get('config','ENVIA_MUITOS')
         ENVIA_HASS = config.get('config','ENVIA_HASS')
@@ -172,7 +190,9 @@ def on_connect(client, userdata, flags, rc):
 # The callback for when a PUBLISH message is received from the server.
 def on_message(client, userdata, msg):
     res = json.loads(msg.payload)
-    if ECHO: print(msg.topic+" "+str(msg.payload))
+    if ECHO: 
+        print(msg.topic+" "+str(msg.payload))
+        print(res)
     v=res['cmd'].upper()
     if v=='T':
         send_command("Test",cmd['T'])
@@ -361,29 +381,15 @@ def json_remove_vazio(strJson):
             cp_dados.pop(k)  # remove vazio
     return json.dumps(cp_dados) # converte dict para json
 
-def send_hass():
-    ''' Envia parametros para incluir device no hass.io '''
-    global sensor_dic
-    component = "sensor"
-
-    # var comuns
-    varComuns = {'sw_version': VERSAO,
-                 'model': noBreakInfo['info'],
-                 'manufacturer': MANUFACTURER,
-                 'device_name': noBreakInfo['name'],
-                 'identifiers': noBreakInfo['name'] + "_" + UPS_ID,
-                 'via_device': VIA_DEVICE,
-                 'uniq_id': UPS_ID}
-    if sensor_dic == "":
-        json_file = open('sensor.json')
-        json_str = json_file.read()
-        sensor_dic = json.loads(json_str)
-    key_todos = sensor_dic['todos']
-    sensor_dic.pop('todos')
-    for key,dic in sensor_dic.items():
+def monta_publica_topico(component, sDict, varComuns):
+    ''' monta e envia topico '''
+    key_todos = sDict['todos']
+    sDict.pop('todos')
+    for key,dic in sDict.items():
         print(key,dic)
         varComuns['uniq_id']=varComuns['identifiers']+"_" + key
-        dic['val_tpl']=dic['name']
+        if not('val_tpl' in dic):
+            dic['val_tpl']=dic['name']
         dic['name']=varComuns['uniq_id']
         dic['device_dict'] = device_dict
         dados = Template(json_hass[component]) # sensor
@@ -395,6 +401,31 @@ def send_hass():
         print(dados)
         dados = json_remove_vazio(dados)
         client.publish(topico, dados)
+
+
+def send_hass():
+    ''' Envia parametros para incluir device no hass.io '''
+    global sensor_dic
+
+    # var comuns
+    varComuns = {'sw_version': VERSAO,
+                 'model': noBreakInfo['info'],
+                 'manufacturer': MANUFACTURER,
+                 'device_name': noBreakInfo['name'],
+                 'identifiers': noBreakInfo['name'] + "_" + UPS_ID,
+                 'via_device': VIA_DEVICE,
+                 'uniq_id': UPS_ID}
+    
+    if len(sensor_dic) == 0:
+        for k,v in json_hass.items():
+            json_file = open(k + '.json')
+            json_str = json_file.read()
+            sensor_dic[k] = json.loads(json_str)
+
+    #key_todos = sensor_dic['todos']
+    #sensor_dic.pop('todos')
+    print('Componente:' + k)
+    monta_publica_topico(k, sensor_dic[k], varComuns)
 
 
 # APP START

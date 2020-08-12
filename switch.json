@@ -1,0 +1,23 @@
+{
+    "Beep":{
+       "name":"Beep",
+       "cmd_t":"home/ups/cmd",
+       "val_tpl":"{{ value_json.BeepLigado }}",
+       "pl_on": {
+           "cmd": "M"
+       },
+       "pl_off": "0",
+       "pl_avail": "1",
+       "pl_not_avail": "0"
+    },
+    "todos":{
+       "name":"",
+       "cmd_t":"",
+       "val_tpl":"",
+       "pl_on": "",
+       "pl_off": "",
+       "pl_avail": "",
+       "pl_not_avail": "",
+       "icon": ""
+    }
+ }
