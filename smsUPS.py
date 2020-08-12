@@ -23,6 +23,7 @@ MQTT_PUB = "home/ups"
 MQTT_HASS = "homeassistant"
 PORTA = '/dev/tty.usbserial-1440' # '/dev/ttyUSB0'
 INTERVALO = 30
+INTERVALO_HASS = 600
 INTERVALO_DISCOVERY = 600
 ENVIA_JSON = True
 ENVIA_MUITOS = True
@@ -138,6 +139,14 @@ device_dict = ''' "name": "$device_name",
 
 sensor_dic = dict() # {}
 
+def get_config (config, topic, key, default):
+    ''' Read config data '''
+    ret = default
+    try:
+        ret = config.get(topic, key)
+    except:
+        ret = default
+    return ret
 
 def get_secrets():
     ''' GET configuration data '''
@@ -160,7 +169,7 @@ def get_secrets():
     global SMSUPS_CLIENTE
     global LOG_FILE
     print ("Getting config file.")
-    log.debug("Getting config file.")
+    #log.debug("Getting config file.")
     try:
         from configparser import ConfigParser
         config = ConfigParser()
@@ -168,6 +177,32 @@ def get_secrets():
         from ConfigParser import ConfigParser  # ver. < 3.0
     try:
         config.read(SECRETS)
+    except:
+        log.warning("Can't load config. Using default config.")
+        print ("defalt config")
+    # le os dados
+    MQTT_PASSWORD = get_config(config, 'secrets', 'MQTT_PASS', MQTT_PASSWORD)
+    MQTT_USERNAME  = get_config(config, 'secrets', 'MQTT_USER', MQTT_USERNAME)
+    MQTT_HOST = get_config(config, 'secrets', 'MQTT_HOST', MQTT_HOST)
+    MQTT_TOPIC = get_config(config, 'config', 'MQTT_TOPIC', MQTT_TOPIC)
+    MQTT_PUB = get_config(config, 'config', 'MQTT_PUB', MQTT_PUB)
+    MQTT_HASS = get_config(config, 'config', 'MQTT_HASS', MQTT_HASS)
+    PORTA = get_config(config, 'config','PORTA', PORTA)
+    INTERVALO = int(get_config(config, 'config','INTERVALO', INTERVALO))
+    INTERVALO_HASS = int(get_config(config, 'config','INTERVALO_HASS', INTERVALO_HASS))
+    ENVIA_JSON = get_config(config, 'config','ENVIA_JSON', ENVIA_JSON )
+    ENVIA_MUITOS = get_config(config, 'config','ENVIA_MUITOS', ENVIA_MUITOS)
+    ENVIA_HASS = get_config(config, 'config','ENVIA_HASS', ENVIA_HASS)
+    ECHO = get_config(config, 'config','ECHO', ECHO)
+    UPS_NAME = get_config(config, 'device','UPS_NAME', UPS_NAME) 
+    UPS_ID = get_config(config, 'device','UPS_ID', UPS_ID) 
+    SMSUPS_SERVER = get_config(config, 'config', 'SMSUPS_SERVER', SMSUPS_SERVER)
+    SMSUPS_CLIENTE = get_config(config, 'config', 'SMSUPS_CLIENTE', SMSUPS_CLIENTE)
+    LOG_FILE = get_config(config, 'config', 'LOG_FILE', LOG_FILE)
+
+    if ENVIA_HASS: ENVIA_JSON = True
+
+    '''
         MQTT_PASSWORD = config.get('secrets', 'MQTT_PASS')
         MQTT_USERNAME  = config.get('secrets', 'MQTT_USER')
         MQTT_HOST = config.get('secrets', 'MQTT_HOST')
@@ -183,7 +218,7 @@ def get_secrets():
         ECHO = config.get('config','ECHO')
         UPS_NAME = config.get('device','UPS_NAME') 
         UPS_ID = config.get('device','UPS_ID') 
-        SMSUPS_SERVER = str(config.get('config', 'SMSUPS_SERVER'))
+        SMSUPS_SERVER = config.get('config', 'SMSUPS_SERVER')
         SMSUPS_CLIENTE = config.get('config', 'SMSUPS_CLIENTE')
         LOG_FILE = config.get('config', 'LOG_FILE')
 
@@ -191,6 +226,7 @@ def get_secrets():
     except:
         log.warning("Can't load config. Using default config.")
         print ("defalt config")
+    '''
 
 # The callback for when the client receives a CONNACK response from the server.
 def on_connect(client, userdata, flags, rc):
@@ -267,7 +303,9 @@ def on_message(client, userdata, msg):
 
 def send_command(cmd_name, cmd_string):
     ''' envia um comando para o nobreak '''
+    global serialOk
     respHex = ""
+    log.debug("send-cmd - serialok:" + str(serialOk))
     if serialOk:
         if ECHO: print ("\ncmd_name:", cmd_name)
         if ECHO: print ("cmd_string:", cmd_string)
@@ -335,6 +373,7 @@ def dadosNoBreak(lista):
     global noBreak
     if lista is None:
         print ("No UPS Data")
+        log.debug ("No UPS Data")
         lista = ["1"] * 15
         lista[1] = "0"
         lista[2] = "0"
@@ -416,6 +455,9 @@ def getNoBreakInfo():
         if len(noBreakInfo['name'])+len(noBreakInfo['name'])<5:
             noBreakInfo['name'] = UPS_NAME
             noBreakInfo['info'] = 'no info'
+    log.debug ("UPS Info: " + 
+        noBreakInfo['name'] + " / " + 
+        noBreakInfo['info'])
 
 def queryQ():
     ''' get ups data and publish'''
@@ -488,7 +530,7 @@ def send_hass():
     for k in sensor_dic.items():
         print('Componente:' + k[0])
         monta_publica_topico(k[0], sensor_dic[k[0]], varComuns)
-        
+
     devices_enviados = True
 
 def abre_serial():
@@ -506,6 +548,8 @@ def abre_serial():
         log.debug ("Port " + PORTA + " - is open: " + str(ser.isOpen()))
     except:
         print ("I was unable to open the serial port ", PORTA)
+        log.warning ("I was unable to open the serial port " + PORTA)
+
         serialOk = False
         if SMSUPS_SERVER and not SMSUPS_CLIENTE:
             print ("I'm going to stop the program.")
@@ -530,8 +574,8 @@ log.debug("Starting up...")
 
 get_secrets()
 
-# MQQT Start
-log.info("Starting MQQT " + MQTT_HOST)
+# MQTT Start
+log.info("Starting MQTT " + MQTT_HOST)
 client = mqtt.Client()
 client.username_pw_set(username=MQTT_USERNAME, password=MQTT_PASSWORD)
 client.on_connect = on_connect
@@ -539,7 +583,7 @@ client.on_message = on_message
 client.on_disconnect = on_disconnect
 client.connect(MQTT_HOST, 1883, 60)
 client.loop_start()  # start the loop
-log.info("MQQT OK")
+log.info("MQTT OK")
 
 
 while not Connected:
