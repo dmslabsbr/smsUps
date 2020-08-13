@@ -21,7 +21,7 @@ MQTT_PASSWORD  = ""
 MQTT_TOPIC  = "$SYS/#"
 MQTT_PUB = "home/ups"
 MQTT_HASS = "homeassistant"
-PORTA = '/dev/tty.usbserial-1440' # '/dev/ttyUSB0'
+PORTA = '/dev/tty.usbserial-1470, /dev/tty.usbserial-1440, /dev/ttyUSB0'
 INTERVALO = 30
 INTERVALO_HASS = 600
 INTERVALO_DISCOVERY = 600
@@ -66,6 +66,7 @@ cmd = {'Q':"51 ff ff ff ff b3 0d",  # pega_dados "Q"
 Connected = False #global variable for the state of the connection
 devices_enviados = False  # Global - Controla quando enviar novamente o cabeçalho para autodiscovery
 serialOk = False
+porta_atual = 0
 
 noBreakInfo = {'name':'',
     'info':''} 
@@ -89,6 +90,11 @@ noBreak = {'lastinputVac':0,
     'info': "",
     'name': ''}
 
+status = {"ip":"?",
+          "serial": False,
+          "ups": False,
+          "mqqt": False}
+          
 
 json_hass = {"sensor": '''
 { 
@@ -188,6 +194,7 @@ def get_secrets():
     MQTT_PUB = get_config(config, 'config', 'MQTT_PUB', MQTT_PUB)
     MQTT_HASS = get_config(config, 'config', 'MQTT_HASS', MQTT_HASS)
     PORTA = get_config(config, 'config','PORTA', PORTA)
+    PORTA = PORTA.split(',') # caso mais de uma porta
     INTERVALO = int(get_config(config, 'config','INTERVALO', INTERVALO))
     INTERVALO_HASS = int(get_config(config, 'config','INTERVALO_HASS', INTERVALO_HASS))
     ENVIA_JSON = get_config(config, 'config','ENVIA_JSON', ENVIA_JSON )
@@ -202,35 +209,11 @@ def get_secrets():
 
     if ENVIA_HASS: ENVIA_JSON = True
 
-    '''
-        MQTT_PASSWORD = config.get('secrets', 'MQTT_PASS')
-        MQTT_USERNAME  = config.get('secrets', 'MQTT_USER')
-        MQTT_HOST = config.get('secrets', 'MQTT_HOST')
-        MQTT_TOPIC = config.get('config', 'MQTT_TOPIC')
-        MQTT_PUB = config.get('config', 'MQTT_PUB')
-        MQTT_HASS = config.get('config', 'MQTT_HASS')
-        PORTA = config.get('config','PORTA')
-        INTERVALO = int(config.get('config','INTERVALO'))
-        INTERVALO_HASS = int(config.get('config','INTERVALO_HASS'))
-        ENVIA_JSON = config.get('config','ENVIA_JSON')
-        ENVIA_MUITOS = config.get('config','ENVIA_MUITOS')
-        ENVIA_HASS = config.get('config','ENVIA_HASS')
-        ECHO = config.get('config','ECHO')
-        UPS_NAME = config.get('device','UPS_NAME') 
-        UPS_ID = config.get('device','UPS_ID') 
-        SMSUPS_SERVER = config.get('config', 'SMSUPS_SERVER')
-        SMSUPS_CLIENTE = config.get('config', 'SMSUPS_CLIENTE')
-        LOG_FILE = config.get('config', 'LOG_FILE')
-
-        if ENVIA_HASS: ENVIA_JSON = True
-    except:
-        log.warning("Can't load config. Using default config.")
-        print ("defalt config")
-    '''
 
 # The callback for when the client receives a CONNACK response from the server.
 def on_connect(client, userdata, flags, rc):
     global Connected
+    global status
     print("Connected with result code "+str(rc))
     log.debug("Connected with result code "+str(rc))
     if rc == 0:
@@ -254,6 +237,10 @@ def on_connect(client, userdata, flags, rc):
         print (rc + tp_c[rc])
         log.error(rc + tp_c[rc])
         # tratar quando for 3 e outros
+    if Connected:
+        status['mqqt'] = "on"
+    else:
+        status['mqqt'] = "off"
 
 def on_disconnect(client, userdata, rc):
     global Connected
@@ -264,6 +251,7 @@ def on_disconnect(client, userdata, rc):
     client.connected_flag=False
     client.disconnect_flag=True
     devices_enviados = False # Force sending again
+    status['mqqt'] = "off"
 
 # The callback for when a PUBLISH message is received from the server.
 def on_message(client, userdata, msg):
@@ -319,7 +307,7 @@ def send_command(cmd_name, cmd_string):
         response = ser.read(32)
         respHex = binascii.hexlify(bytearray(response))
         if ECHO: print ("response:", respHex)
-        log.debug ("response: " + respHex)
+        log.debug ("response: " + str(respHex))
     return respHex
 
 
@@ -444,6 +432,7 @@ def hex2Ascii(hexa):
 
 def getNoBreakInfo():
     global noBreakInfo
+    global status
     if len(noBreakInfo['name']) == 0:
         # get nobreak data
         res = send_command("Name",cmd['I'])
@@ -452,9 +441,16 @@ def getNoBreakInfo():
             # get nobreak data
             res = send_command("Info",cmd['F'])
             noBreakInfo['info'] = hex2Ascii(res)
-        if len(noBreakInfo['name'])+len(noBreakInfo['name'])<5:
+        if noBreakInfo['name'] == '' or not noBreakInfo['name'][0] == ":": # len(noBreakInfo['name'])+len(noBreakInfo['name'])<5:
             noBreakInfo['name'] = UPS_NAME
             noBreakInfo['info'] = 'no info'
+            status['ups'] = 'off'
+        else:
+            noBreakInfo['name'] = noBreakInfo['name'][1:]
+            status['ups'] = 'Connected'
+    if noBreakInfo['name'][-1:] == '\r': noBreakInfo['name'] = noBreakInfo['name'][0:-1]
+    if noBreakInfo['info'][-1:] == '\r': noBreakInfo['info'] = noBreakInfo['info'][0:-1]
+    if noBreakInfo['info'][0] == ';': noBreakInfo['info'] = noBreakInfo['info'][1:]
     log.debug ("UPS Info: " + 
         noBreakInfo['name'] + " / " + 
         noBreakInfo['info'])
@@ -473,10 +469,14 @@ def queryQ():
         client.publish(MQTT_PUB + "/json", jsonUPS)
     if ENVIA_MUITOS:
         publish_many(MQTT_PUB, upsData)
+    if ENVIA_JSON or ENVIA_HASS or ENVIA_MUITOS:
+        jsonStatus = json.dumps(status)
+        client.publish(MQTT_PUB + "/status", jsonStatus)
     return upsData
 
 def json_remove_vazio(strJson):
     ''' remove linhas / elementos vazios de uma string Json '''
+    strJson.replace("\n","")
     dados = json.loads(strJson)  # converte string para dict
     cp_dados = json.loads(strJson) # cria uma copia
     for k,v in dados.items():
@@ -517,7 +517,7 @@ def send_hass():
                  'model': noBreakInfo['info'],
                  'manufacturer': MANUFACTURER,
                  'device_name': noBreakInfo['name'],
-                 'identifiers': noBreakInfo['name'] + "_" + UPS_ID,
+                 'identifiers': UPS_NAME + "_" + UPS_ID,
                  'via_device': VIA_DEVICE,
                  'uniq_id': UPS_ID}
     
@@ -537,24 +537,40 @@ def abre_serial():
     ''' abre a porta serial '''
     global ser
     global serialOk
+    global status
+    global porta_atual
+    porta_ser = PORTA[porta_atual].strip()
+
     try:
-        ser = serial.Serial(PORTA,
+        ser = serial.Serial(porta_ser,
             baudrate=2400,
             parity=serial.PARITY_NONE,
             stopbits=serial.STOPBITS_ONE,
             bytesize=serial.EIGHTBITS,
             timeout = 1)
-        print ("Porta: " + PORTA + " - " + str(ser.isOpen()))
-        log.debug ("Port " + PORTA + " - is open: " + str(ser.isOpen()))
+        print ("Porta: " + porta_ser + " - " + str(ser.isOpen()))
+        log.debug ("Port " + porta_ser + " - is open: " + str(ser.isOpen()))
+        serialOk = ser.isOpen() # True
+        status['serial'] = "open"
     except:
-        print ("I was unable to open the serial port ", PORTA)
-        log.warning ("I was unable to open the serial port " + PORTA)
-
+        print ("I was unable to open the serial port ", porta_ser)
+        log.warning ("I was unable to open the serial port " + porta_ser)
+        status['serial'] = 'off'
         serialOk = False
+        # verifica outras portas se for servidor
+        if SMSUPS_SERVER:
+            porta_atual+=1   # add 1
+            if porta_atual > len(PORTA):
+                porta_atual = 0
+        '''       Não precisa mais - fica tentando.
         if SMSUPS_SERVER and not SMSUPS_CLIENTE:
             print ("I'm going to stop the program.")
             log.critical ("I'm going to stop the program.")
             raise SystemExit(0)
+        '''
+    return serialOk
+
+
 
 # APP START
 
@@ -592,7 +608,7 @@ while not Connected:
 serialOk = False
 
 if not serialOk:
-    abre_serial()
+    if SMSUPS_SERVER: serialOk = abre_serial()
 
 
 # Time entre a conexao serial e o tempo para escrever (enviar algo)
@@ -612,7 +628,7 @@ while True:
             send_hass
     if SMSUPS_SERVER:
         if not serialOk:
-            abre_serial()
+            serialOk = abre_serial()
 
 
 
