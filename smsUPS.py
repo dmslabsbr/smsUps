@@ -40,7 +40,7 @@ LOG_LEVEL = logging.DEBUG
 
 
 # CONST
-VERSAO = '0.3'
+VERSAO = '0.4'
 CR = '0D'
 MANUFACTURER = 'dmslabs'
 VIA_DEVICE = 'smsUPS'
