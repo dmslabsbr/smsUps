@@ -10,6 +10,7 @@ __pycache__/
 prot*.xml
 protocolos/
 secrets.ini
+launch.json
 
 # Distribution / packaging
 .Python

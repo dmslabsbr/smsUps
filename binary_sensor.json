@@ -4,8 +4,8 @@
        "device_class":"sound",
        "pl_on": "1",
        "pl_off": "0",
-       "pl_avail": "1",
-       "pl_not_avail": "0"
+       "pl_avail": "",
+       "pl_not_avail": ""
     },
     "ShutdownAtivo":{
        "name":"ShutdownAtivo",

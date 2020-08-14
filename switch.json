@@ -2,14 +2,49 @@
     "Beep":{
        "name":"Beep",
        "cmd_t":"home/ups/cmd",
+       "icon":"mdi:music-note",
        "val_tpl":"{{ value_json.BeepLigado }}",
        "pl_on": {
            "cmd": "M"
        },
-       "pl_off": "0",
+       "pl_off": {
+         "cmd": "M"
+     },
        "pl_avail": "1",
        "pl_not_avail": "0"
     },
+    "test_10s":{
+      "name":"test_10s",
+      "cmd_t":"home/ups/cmd",
+      "icon":"mdi:timer-10",
+      "val_tpl":"{{ value_json.TesteAtivo }}",
+      "pl_on": {
+          "cmd": "T"
+      },
+      "pl_off": {"cmd": "C"},
+      "pl_avail": "1",
+      "pl_not_avail": "0"
+   },
+   "cancel":{
+      "name":"Cancel Test",
+      "cmd_t":"home/ups/cmd",
+      "icon":"mdi:cancel",
+      "val_tpl":"{{ not value_json.TesteAtivo }}",
+      "pl_on": {"cmd": "C"},
+      "pl_off": {"cmd": "C"},
+      "pl_avail": "0",
+      "pl_not_avail": "1"
+   },
+   "test_low":{
+      "name":"Test low battery",
+      "cmd_t":"home/ups/cmd",
+      "icon":"mdi:timer-sand",
+      "val_tpl":"{{ value_json.TesteAtivo }}",
+      "pl_on": {"cmd": "L"},
+      "pl_off": {"cmd": "C"},
+      "pl_avail": "1",
+      "pl_not_avail": "0"
+   },
     "todos":{
        "name":"",
        "cmd_t":"",

@@ -34,6 +34,7 @@ UPS_ID = '01'
 SMSUPS_SERVER = True
 SMSUPS_CLIENTE = True
 LOG_FILE = '/var/tmp/smsUPS.log'
+SHUTDOWN_CMD = '"shutdown /s /t 1", "sudo shutdown now", "systemctl poweroff"'
 
 LOG_LEVEL = logging.DEBUG
 
@@ -44,6 +45,7 @@ CR = '0D'
 MANUFACTURER = 'dmslabs'
 VIA_DEVICE = 'smsUPS'
 NODE_ID = 'dmslabs'
+APP_NAME = 'smsUPS'
 
 respostaH = [None] * 18
 
@@ -125,6 +127,7 @@ json_hass = {"sensor": '''
   "stat_t": "home/ups/json",
   "name": "$name",
   "cmd_t":"$cmd_t",
+  "icon":"$icon",
   "uniq_id": "$uniq_id",
   "val_tpl": "$val_tpl",
   "device": { $device_dict },
@@ -145,11 +148,13 @@ device_dict = ''' "name": "$device_name",
 
 sensor_dic = dict() # {}
 
-def get_config (config, topic, key, default):
+def get_config (config, topic, key, default, getBool = False, getInt = False):
     ''' Read config data '''
     ret = default
     try:
         ret = config.get(topic, key)
+        if getBool or type(default) is bool: ret = config.getboolean(topic, key)
+        if getInt or type(default) is int: ret = config.getint(topic, key)
     except:
         ret = default
     return ret
@@ -174,6 +179,7 @@ def get_secrets():
     global SMSUPS_SERVER
     global SMSUPS_CLIENTE
     global LOG_FILE
+    global SHUTDOWN_CMD
     print ("Getting config file.")
     #log.debug("Getting config file.")
     try:
@@ -195,20 +201,40 @@ def get_secrets():
     MQTT_HASS = get_config(config, 'config', 'MQTT_HASS', MQTT_HASS)
     PORTA = get_config(config, 'config','PORTA', PORTA)
     PORTA = PORTA.split(',') # caso mais de uma porta
-    INTERVALO = int(get_config(config, 'config','INTERVALO', INTERVALO))
-    INTERVALO_HASS = int(get_config(config, 'config','INTERVALO_HASS', INTERVALO_HASS))
-    ENVIA_JSON = get_config(config, 'config','ENVIA_JSON', ENVIA_JSON )
-    ENVIA_MUITOS = get_config(config, 'config','ENVIA_MUITOS', ENVIA_MUITOS)
-    ENVIA_HASS = get_config(config, 'config','ENVIA_HASS', ENVIA_HASS)
-    ECHO = get_config(config, 'config','ECHO', ECHO)
+    INTERVALO = get_config(config, 'config','INTERVALO', INTERVALO, getInt=True)
+    INTERVALO_HASS = get_config(config, 'config','INTERVALO_HASS', INTERVALO_HASS, getInt=True)
+    ENVIA_JSON = get_config(config, 'config','ENVIA_JSON', ENVIA_JSON, getBool=True)
+    ENVIA_MUITOS = get_config(config, 'config','ENVIA_MUITOS', ENVIA_MUITOS, getBool=True)
+    ENVIA_HASS = get_config(config, 'config','ENVIA_HASS', ENVIA_HASS, getBool=True)
+    ECHO = get_config(config, 'config','ECHO', ECHO, getBool=True)
     UPS_NAME = get_config(config, 'device','UPS_NAME', UPS_NAME) 
     UPS_ID = get_config(config, 'device','UPS_ID', UPS_ID) 
-    SMSUPS_SERVER = get_config(config, 'config', 'SMSUPS_SERVER', SMSUPS_SERVER)
-    SMSUPS_CLIENTE = get_config(config, 'config', 'SMSUPS_CLIENTE', SMSUPS_CLIENTE)
+    SMSUPS_SERVER = get_config(config, 'config', 'SMSUPS_SERVER', SMSUPS_SERVER, getBool=True)
+    SMSUPS_CLIENTE = get_config(config, 'config', 'SMSUPS_CLIENTE', SMSUPS_CLIENTE, getBool=True)
     LOG_FILE = get_config(config, 'config', 'LOG_FILE', LOG_FILE)
+    SHUTDOWN_CMD = get_config(config, 'config', 'SHUTDOWN_CMD', SHUTDOWN_CMD)
+    SHUTDOWN_CMD = SHUTDOWN_CMD.split(',')
 
+    for i in range(len(SHUTDOWN_CMD)):
+        SHUTDOWN_CMD[i] = SHUTDOWN_CMD[i].replace('"','').replace("'", '')
     if ENVIA_HASS: ENVIA_JSON = True
 
+def shutdown_computer():
+    ''' try to shutdown the computer '''
+    log.warning('tring to shutdown the computer')
+    import sys
+    p = 'sys.platform: ' + sys.platform
+    print (p)
+    log.info(p)
+    if sys.platform == 'win32':
+        import ctypes
+        user32 = ctypes.WinDLL('user32')
+        user32.ExitWindowsEx(0x00000008, 0x00000000)
+    else:
+        import os
+        for i in range(len(SHUTDOWN_CMD)):
+            command = SHUTDOWN_CMD[i]  # trying many commands
+            os.system(command) # 'sudo shutdown now'
 
 # The callback for when the client receives a CONNACK response from the server.
 def on_connect(client, userdata, flags, rc):
@@ -255,18 +281,35 @@ def on_disconnect(client, userdata, rc):
 
 # The callback for when a PUBLISH message is received from the server.
 def on_message(client, userdata, msg):
-    res = json.loads(msg.payload)
+    try:
+        res = json.loads(msg.payload)
+    except Exception as e:
+        if e.__class__.__name__ == 'JSONDecodeError':
+            msg_p = msg.payload
+            msg_p = msg_p.decode()
+            msg_p = msg_p.replace("'",'"')
+            res = json.loads(msg_p)
+        else:
+            err_msg = 'Error! Code: {c}, Message, {m}'.format(c = type(e).__name__, m = str(e))
+            print(err_msg)
+            log.warning (err_msg)
     if ECHO: 
         print(msg.topic+" "+str(msg.payload))
         print(res)
     log.debug("on_message:" + msg.topic + str(msg.payload))
     v=res['cmd'].upper()
     if v=='T':
-        send_command("Test",cmd['T'])
+        ret = send_command("Test",cmd['T'])
+        client.publish(MQTT_PUB + "/result", str(ret))
     elif v=="M":
-        send_command("Beep",cmd['M'])
+        ret = send_command("Beep",cmd['M'])
+        client.publish(MQTT_PUB + "/result", str(ret))
     elif v=="C":
-        send_command("Cancel",cmd['C'])
+        ret = send_command("Cancel",cmd['C'])
+        client.publish(MQTT_PUB + "/result", str(ret))
+    elif v=="L":
+        ret = send_command("TestLow",cmd['L'])
+        client.publish(MQTT_PUB + "/result", str(ret))
     elif v=="RAW":
         # envia comando como recebido
         ret = send_command("Raw",res['val'])
@@ -457,6 +500,7 @@ def getNoBreakInfo():
 
 def queryQ():
     ''' get ups data and publish'''
+    global status
     x = send_command("query",cmd['Q'])
     lista_dados = trataRetorno(x)
     upsData = dadosNoBreak(lista_dados)
@@ -470,6 +514,12 @@ def queryQ():
     if ENVIA_MUITOS:
         publish_many(MQTT_PUB, upsData)
     if ENVIA_JSON or ENVIA_HASS or ENVIA_MUITOS:
+        if status['serial'] == 'open' and  \
+           status['ups'] == 'Connected' and \
+           status['mqqt'] == 'on': 
+            status[APP_NAME] = "on"
+        else:
+            status[APP_NAME] = "off"
         jsonStatus = json.dumps(status)
         client.publish(MQTT_PUB + "/status", jsonStatus)
     return upsData
@@ -560,7 +610,7 @@ def abre_serial():
         # verifica outras portas se for servidor
         if SMSUPS_SERVER:
             porta_atual+=1   # add 1
-            if porta_atual > len(PORTA):
+            if porta_atual > len(PORTA)-1:
                 porta_atual = 0
         '''       Não precisa mais - fica tentando.
         if SMSUPS_SERVER and not SMSUPS_CLIENTE:
@@ -614,22 +664,22 @@ if not serialOk:
 # Time entre a conexao serial e o tempo para escrever (enviar algo)
 time.sleep(1.8) # Entre 1.5s a 2s
 
-getNoBreakInfo()
 
-if ENVIA_HASS:
-    send_hass()
+if SMSUPS_SERVER:
+    getNoBreakInfo()
+    if ENVIA_HASS:
+        send_hass()
 
 # loop start
 while True:
-    queryQ()
-    time.sleep(INTERVALO)
-    if ENVIA_HASS:
-        if devices_enviados and Connected and SMSUPS_SERVER:
-            send_hass
-    if SMSUPS_SERVER:
+    if SMSUPS_SERVER:  # só se for servidor
+        queryQ()  # Get UPS data
+        if ENVIA_HASS:
+            if devices_enviados and Connected and SMSUPS_SERVER:
+                send_hass
         if not serialOk:
             serialOk = abre_serial()
-
+    time.sleep(INTERVALO) # dá um tempo
 
 
 # client.loop_forever()

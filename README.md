@@ -33,6 +33,7 @@ sudo systemctl daemon-reload
 sudo systemctl enable smsUPS.service
 sudo systemctl start smsUPS.service
 sudo systemctl status smsUPS.service
+sudo systemctl stop smsUPS.service
 
 
 
@@ -46,7 +47,13 @@ Send json to /home/ups/cmd
 
 {cmd: "T", val: ""}  - testa bateria por 10 segundos - sem retorno  - "T"
 {cmd: "M", val: ""}  - # Liga/desliga beep   - sem retorno  "M"
+   ex: {
+         "cmd": "M"
+       }
 {cmd: "C", val: ""} - Cancela Teste "C"  - Não cancela o "L"
+   ex: {
+         "cmd": "C"
+       }
 {cmd: "RAW", val: ""} - Envia para o nobreak os dados em val
    ex: {
          "cmd": "RAW",
