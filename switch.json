@@ -25,6 +25,32 @@
       "pl_avail": "1",
       "pl_not_avail": "0"
    },
+    "test_01m":{
+      "name":"test_01m",
+      "cmd_t":"home/ups/cmd",
+      "icon":"mdi:timer-sand",
+      "val_tpl":"{{ value_json.TesteAtivo }}",
+      "pl_on": {
+          "cmd": "TN",
+          "val": "60"
+      },
+      "pl_off": {"cmd": "C"},
+      "pl_avail": "1",
+      "pl_not_avail": "0"
+   },
+   "test_05m":{
+      "name":"test_05m",
+      "cmd_t":"home/ups/cmd",
+      "icon":"mdi:timer-sand",
+      "val_tpl":"{{ value_json.TesteAtivo }}",
+      "pl_on": {
+          "cmd": "TN",
+          "val": "300"
+      },
+      "pl_off": {"cmd": "C"},
+      "pl_avail": "1",
+      "pl_not_avail": "0"
+   },
    "cancel":{
       "name":"Cancel Test",
       "cmd_t":"home/ups/cmd",

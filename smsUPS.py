@@ -56,10 +56,10 @@ cmd = {'Q':"51 ff ff ff ff b3 0d",  # pega_dados "Q"
         'G':"47 01 ff ff ff bb 0d", # ? "G"
         'M':"4d ff ff ff ff b7 0d", # Liga/desliga beep   - sem retorno  "M"
         'T':"54 00 10 00 00 9c 0d", # testa bateria por 10 segundos - sem retorno  - "T"    
-        'T1':"54 00 64 00 00 48 0d", # t 1 minuto
-        'T2':"54 00 c8 00 00 e4 0d", # t 2 minutos  
-        'T3':"54 01 2c 00 00 7f 0d", # t 3 minutos  
-        'T9':"54 03 84 00 00 25 0d", # t 9 minutos
+        'T1':"54 00 64 00 00 48 0d", # t 100 s
+        'T2':"54 00 c8 00 00 e4 0d", # t 200 s  
+        'T3':"54 01 2c 00 00 7f 0d", # t 300 s  
+        'T9':"54 03 84 00 00 25 0d", # t 900 s
         'C':"43 ff ff ff ff c1 0d", # Cancela Teste "C"  - Não cancela o "L"
         'L':"4C ff ff ff ff" # teste bateria baixa "L" 
     }
@@ -301,6 +301,13 @@ def on_message(client, userdata, msg):
     if v=='T':
         ret = send_command("Test",cmd['T'])
         client.publish(MQTT_PUB + "/result", str(ret))
+    if v=='TN':
+        if len(res['val'])!=0:
+            val = res['val']
+            if type(val) is int:
+                comando = tempo2hexCMD(val)
+        ret = send_command("Test",cmd['T'])  # teste N minutes
+        client.publish(MQTT_PUB + "/result", str(ret))
     elif v=="M":
         ret = send_command("Beep",cmd['M'])
         client.publish(MQTT_PUB + "/result", str(ret))
@@ -449,11 +456,27 @@ def test(raw):
     print (raw)
     mostra_dados(ret)
 
+
+def tempo2hexCMD(i):
+    '''  Converte um int para hex para ser enviado ''''
+    if not type(i) is int:
+        log.error ('i must be an integer.') 
+        i = 0
+    if i > 3600:
+        log.warning ('tempo2hex: Valor de i > 3600. i=' + i)
+        i = 3600
+    ret = "000000" + hex(i)[2:]
+    ret = ret[-4:].upper()
+    ret = ret[0:2] + " " + ret[2:5]
+    ret = cmd['T'][0:2] + " " + ret + "00 00"
+    ret = montaCmd(ret)
+    return ret
+
+
 def montaCmd(c1):
     ''' Monta comando para enviar para o no-break 
     exemplo: montaCmd('47 ff ff ff ff')
     '''
-    
     st = c1
     check = chk(st)
     check = check.replace("0x","")
