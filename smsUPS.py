@@ -87,7 +87,7 @@ noBreak = {'lastinputVac':0,
     'Boost': False,
     'ByPass': False,
     'BateriaBaixa': False,
-    'BateriaLigada': False,
+    'BateriaEmUso': False,
     'time': "",
     'info': "",
     'name': ''}
@@ -444,7 +444,7 @@ def dadosNoBreak(lista):
     noBreak['Boost'] = bi[3]          # Boost / Potência de Saída Elevada
     noBreak['ByPass'] = bi[2]         # byPass
     noBreak['BateriaBaixa'] = bi[1]   # Bateria Baixa / Falha de Bateria
-    noBreak['BateriaLigada'] = bi[0]  # Bateria Ligada / em uso
+    noBreak['BateriaEmUso'] = bi[0]  # Bateria Ligada / em uso
     noBreak['RedeEletrica'] = "ver"  # Rede Elétrica / Vcc na entrada
 
     return noBreak
@@ -752,5 +752,5 @@ UpsOk
 Boost
 ByPass
 BateriaBaixa
-BateriaLigada
+BateriaEmUso
 '''
