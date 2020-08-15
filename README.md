@@ -46,6 +46,13 @@ Send json to /home/ups/cmd
 }
 
 {cmd: "T", val: ""}  - testa bateria por 10 segundos - sem retorno  - "T"
+
+{cmd: "TN", val: ""}  - testa bateria por n segundos - sem retorno  - "T"
+   ex: {
+         "cmd": "TN",
+         "val": 120
+       }
+
 {cmd: "M", val: ""}  - # Liga/desliga beep   - sem retorno  "M"
    ex: {
          "cmd": "M"
@@ -93,3 +100,10 @@ LOG_FILE = '/var/tmp/smsUPS.log'
 [device]
 UPS_NAME = SMS
 UPS_ID = 01
+
+
+
+atualizar
+
+git reset --hard
+git merge origin/master

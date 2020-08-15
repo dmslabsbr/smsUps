@@ -135,7 +135,9 @@ json_hass = {"sensor": '''
   "pl_off": "$pl_off",
   "pl_avail": "$pl_avail",
   "pl_not_avail": "$pl_not_avail",
-  "qos": "0"
+  "qos": "0",
+  "state_off": "$state_off",
+  "state_on": "$state_on" 
 }
 '''}
 
@@ -296,18 +298,19 @@ def on_message(client, userdata, msg):
     if ECHO: 
         print(msg.topic+" "+str(msg.payload))
         print(res)
-    log.debug("on_message:" + msg.topic + str(msg.payload))
+    log.debug("on_message: " + msg.topic + " " + str(msg.payload))
     v=res['cmd'].upper()
+    log.info("v==tn" + str(v=='TN'))
     if v=='T':
         ret = send_command("Test",cmd['T'])
         client.publish(MQTT_PUB + "/result", str(ret))
     if v=='TN':
-        if len(res['val'])!=0:
-            val = res['val']
-            if type(val) is int:
-                comando = tempo2hexCMD(val)
-        ret = send_command("Test",cmd['T'])  # teste N minutes
-        client.publish(MQTT_PUB + "/result", str(ret))
+        val = res['val']
+        if val.isnumeric():
+            val = int(val)
+            comando = tempo2hexCMD(val)
+            ret = send_command("Test n", comando)  # teste N minutes
+            client.publish(MQTT_PUB + "/result", str(ret))
     elif v=="M":
         ret = send_command("Beep",cmd['M'])
         client.publish(MQTT_PUB + "/result", str(ret))
@@ -343,7 +346,7 @@ def send_command(cmd_name, cmd_string):
     ''' envia um comando para o nobreak '''
     global serialOk
     respHex = ""
-    log.debug("send-cmd - serialok:" + str(serialOk))
+    log.debug("cmd_name: " + cmd_name + " cmd_str: " + cmd_string)
     if serialOk:
         if ECHO: print ("\ncmd_name:", cmd_name)
         if ECHO: print ("cmd_string:", cmd_string)
@@ -358,6 +361,8 @@ def send_command(cmd_name, cmd_string):
         respHex = binascii.hexlify(bytearray(response))
         if ECHO: print ("response:", respHex)
         log.debug ("response: " + str(respHex))
+    else:
+        log.warning('send-cmd - serial not ok')
     return respHex
 
 
@@ -458,9 +463,9 @@ def test(raw):
 
 
 def tempo2hexCMD(i):
-    '''  Converte um int para hex para ser enviado ''''
+    '''  Converte um int para hex para ser enviado '''
     if not type(i) is int:
-        log.error ('i must be an integer.') 
+        log.error ('i must be a integer.') 
         i = 0
     if i > 3600:
         log.warning ('tempo2hex: Valor de i > 3600. i=' + i)
@@ -468,7 +473,7 @@ def tempo2hexCMD(i):
     ret = "000000" + hex(i)[2:]
     ret = ret[-4:].upper()
     ret = ret[0:2] + " " + ret[2:5]
-    ret = cmd['T'][0:2] + " " + ret + "00 00"
+    ret = cmd['T'][0:2] + " " + ret + "  00 00"
     ret = montaCmd(ret)
     return ret
 
@@ -563,7 +568,7 @@ def monta_publica_topico(component, sDict, varComuns):
     sDict.pop('todos')
     for key,dic in sDict.items():
         print(key,dic)
-        varComuns['uniq_id']=varComuns['identifiers']+"_" + key
+        varComuns['uniq_id']=varComuns['identifiers'] + "_" + key
         if not('val_tpl' in dic):
             dic['val_tpl']=dic['name']
         dic['name']=varComuns['uniq_id']
@@ -576,7 +581,7 @@ def monta_publica_topico(component, sDict, varComuns):
         print(topico)
         print(dados)
         dados = json_remove_vazio(dados)
-        log.debug ("topico: " + topico)
+        # log.debug ("topico: " + topico)
         client.publish(topico, dados)
 
 
@@ -594,6 +599,7 @@ def send_hass():
                  'via_device': VIA_DEVICE,
                  'uniq_id': UPS_ID}
     
+    log.debug('Sensor_dic: ' + str(len(sensor_dic)))
     if len(sensor_dic) == 0:
         for k in json_hass.items():
             json_file = open(k[0] + '.json')

@@ -11,7 +11,9 @@
          "cmd": "M"
      },
        "pl_avail": "1",
-       "pl_not_avail": "0"
+       "pl_not_avail": "0",
+       "state_off": 0,
+       "state_on": 1 
     },
     "test_10s":{
       "name":"test_10s",
@@ -23,7 +25,9 @@
       },
       "pl_off": {"cmd": "C"},
       "pl_avail": "1",
-      "pl_not_avail": "0"
+      "pl_not_avail": "0",
+      "state_off": 0,
+      "state_on": 1
    },
     "test_01m":{
       "name":"test_01m",
@@ -36,7 +40,9 @@
       },
       "pl_off": {"cmd": "C"},
       "pl_avail": "1",
-      "pl_not_avail": "0"
+      "pl_not_avail": "0",
+      "state_off": 0,
+      "state_on": 1 
    },
    "test_05m":{
       "name":"test_05m",
@@ -49,17 +55,21 @@
       },
       "pl_off": {"cmd": "C"},
       "pl_avail": "1",
-      "pl_not_avail": "0"
+      "pl_not_avail": "0",
+      "state_off": 0,
+      "state_on": 1 
    },
    "cancel":{
       "name":"Cancel Test",
       "cmd_t":"home/ups/cmd",
       "icon":"mdi:cancel",
-      "val_tpl":"{{ not value_json.TesteAtivo }}",
+      "val_tpl":"{{ value_json.TesteAtivo }}",
       "pl_on": {"cmd": "C"},
       "pl_off": {"cmd": "C"},
       "pl_avail": "0",
-      "pl_not_avail": "1"
+      "pl_not_avail": "1",
+      "state_off": "1",
+      "state_on": "0" 
    },
    "test_low":{
       "name":"Test low battery",
@@ -79,6 +89,8 @@
        "pl_off": "",
        "pl_avail": "",
        "pl_not_avail": "",
-       "icon": ""
+       "icon": "",
+       "state_off": "",
+       "state_on": "" 
     }
  }
