@@ -57,9 +57,13 @@ Send json to /home/ups/cmd
    ex: {
          "cmd": "M"
        }
-{cmd: "C", val: ""} - Cancela Teste "C"  - Não cancela o "L"
+{cmd: "C", val: ""} - Cancela Shutdown ou Reestore
    ex: {
          "cmd": "C"
+       }
+{cmd: "D", val: ""} - Cancela Testes
+   ex: {
+         "cmd": "D"
        }
 {cmd: "RAW", val: ""} - Envia para o nobreak os dados em val
    ex: {
@@ -95,6 +99,7 @@ MQTT_TOPIC = home/ups/cmd
 MQTT_PUB = home/ups
 MQTT_HASS = homeassistant
 LOG_FILE = '/var/tmp/smsUPS.log'
+SHUTDOWN_CMD = '"shutdown /s /t 1", "sudo shutdown now", "systemctl poweroff", "sudo poweroff"'
 
 
 [device]

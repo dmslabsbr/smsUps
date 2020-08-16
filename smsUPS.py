@@ -34,7 +34,7 @@ UPS_ID = '01'
 SMSUPS_SERVER = True
 SMSUPS_CLIENTE = True
 LOG_FILE = '/var/tmp/smsUPS.log'
-SHUTDOWN_CMD = '"shutdown /s /t 1", "sudo shutdown now", "systemctl poweroff"'
+SHUTDOWN_CMD = '"shutdown /s /t 1", "sudo shutdown now", "systemctl poweroff", "sudo poweroff"'
 
 LOG_LEVEL = logging.DEBUG
 
@@ -60,8 +60,11 @@ cmd = {'Q':"51 ff ff ff ff b3 0d",  # pega_dados "Q"
         'T2':"54 00 c8 00 00 e4 0d", # t 200 s  
         'T3':"54 01 2c 00 00 7f 0d", # t 300 s  
         'T9':"54 03 84 00 00 25 0d", # t 900 s
-        'C':"43 ff ff ff ff c1 0d", # Cancela Teste "C"  - Não cancela o "L"
-        'L':"4C ff ff ff ff" # teste bateria baixa "L" 
+        'C':"43 ff ff ff ff c1 0d", # Cancelamento de Shutdown ou restore
+        'L':"4C ff ff ff ff", # teste bateria baixa "L" 
+         'R': "52 00 C8 27 0F B0 0D", # Shutdown e restore
+         'S': "53 " # Shutdown em n segundos
+
     }
 
 # VARS
@@ -300,11 +303,10 @@ def on_message(client, userdata, msg):
         print(res)
     log.debug("on_message: " + msg.topic + " " + str(msg.payload))
     v=res['cmd'].upper()
-    log.info("v==tn" + str(v=='TN'))
     if v=='T':
         ret = send_command("Test",cmd['T'])
         client.publish(MQTT_PUB + "/result", str(ret))
-    if v=='TN':
+    elif v=='TN':
         val = res['val']
         if val.isnumeric():
             val = int(val)
@@ -315,7 +317,10 @@ def on_message(client, userdata, msg):
         ret = send_command("Beep",cmd['M'])
         client.publish(MQTT_PUB + "/result", str(ret))
     elif v=="C":
-        ret = send_command("Cancel",cmd['C'])
+        ret = send_command("CancelShutdown",cmd['C'])  # cancela shutdown ou reestore
+        client.publish(MQTT_PUB + "/result", str(ret))
+    elif v=="D":
+        ret = send_command("Cancel",cmd['D'])
         client.publish(MQTT_PUB + "/result", str(ret))
     elif v=="L":
         ret = send_command("TestLow",cmd['L'])
@@ -337,9 +342,14 @@ def on_message(client, userdata, msg):
         else:
             log.debug("publish: " + MQTT_PUB + "/result : Invalid command")
             client.publish(MQTT_PUB + "/result", "Invalid command")
-
-    time.sleep(.500)
-    queryQ()
+    elif v=="SHUTDOWN":
+        # call shutdonw commands
+        shutdown_computer()
+    
+    if len(ret)>5:
+        queryQ(ret)
+    else:
+        queryQ()
 
 
 def send_command(cmd_name, cmd_string):
@@ -526,10 +536,13 @@ def getNoBreakInfo():
         noBreakInfo['name'] + " / " + 
         noBreakInfo['info'])
 
-def queryQ():
+def queryQ(raw = ""):
     ''' get ups data and publish'''
     global status
-    x = send_command("query",cmd['Q'])
+    if raw == "":
+        x = send_command("query",cmd['Q'])
+    else:
+        x = raw
     lista_dados = trataRetorno(x)
     upsData = dadosNoBreak(lista_dados)
     if ECHO:
@@ -735,9 +748,12 @@ ser.close()
 	13 - 0xe8		- 0X  FF - batterylevel
 	14 - 0x01		- 0XGG   -
 	15 - 0x7c (|)	- 0X  GG - temperatureC
-	16 - 0x29 ())	- HH     - State bits (beepon, shutdown, test, upsok, 
-	17 - 0x01		- ??	 - ??	boost, onacpower, lowbattery, onbattery)
+	16 - 0x29 ())	- HH     - State bits (beepon, shutdown, test, upsok, boost, onacpower, lowbattery, onbattery)
+	17 - 0x01		- ??	 - checksum  ???
 	18 - 0x0d		- Final da resposta
+
+ 
+    whereis Potência de Saída ???
 
   exemplos:
   *     *      *     *     *     *     *     *     *
