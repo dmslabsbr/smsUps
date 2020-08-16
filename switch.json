@@ -59,13 +59,25 @@
       "state_off": 0,
       "state_on": 1 
    },
-   "cancel":{
+   "cancel_Shutdown":{
+      "name":"Cancel Shutdown",
+      "cmd_t":"home/ups/cmd",
+      "icon":"mdi:cancel",
+      "val_tpl":"{{ value_json.ShutdownAtivo }}",
+      "pl_on": {"cmd": "C"},
+      "pl_off": {"cmd": "C"},
+      "pl_avail": "0",
+      "pl_not_avail": "1",
+      "state_off": "1",
+      "state_on": "0" 
+   },
+   "cancel_test":{
       "name":"Cancel Test",
       "cmd_t":"home/ups/cmd",
       "icon":"mdi:cancel",
       "val_tpl":"{{ value_json.TesteAtivo }}",
-      "pl_on": {"cmd": "C"},
-      "pl_off": {"cmd": "C"},
+      "pl_on": {"cmd": "D"},
+      "pl_off": {"cmd": "D"},
       "pl_avail": "0",
       "pl_not_avail": "1",
       "state_off": "1",

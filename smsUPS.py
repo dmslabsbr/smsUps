@@ -64,7 +64,6 @@ cmd = {'Q':"51 ff ff ff ff b3 0d",  # pega_dados "Q"
         'L':"4C ff ff ff ff", # teste bateria baixa "L" 
          'R': "52 00 C8 27 0F B0 0D", # Shutdown e restore
          'S': "53 " # Shutdown em n segundos
-
     }
 
 # VARS
@@ -304,26 +303,26 @@ def on_message(client, userdata, msg):
     log.debug("on_message: " + msg.topic + " " + str(msg.payload))
     v=res['cmd'].upper()
     if v=='T':
-        ret = send_command("Test",cmd['T'])
+        ret = send_command("Test",cmd['T'], sendQ=True)
         client.publish(MQTT_PUB + "/result", str(ret))
     elif v=='TN':
         val = res['val']
         if val.isnumeric():
             val = int(val)
             comando = tempo2hexCMD(val)
-            ret = send_command("Test n", comando)  # teste N minutes
+            ret = send_command("Test n", comando, sendQ=True)  # teste N minutes
             client.publish(MQTT_PUB + "/result", str(ret))
     elif v=="M":
         ret = send_command("Beep",cmd['M'])
-        client.publish(MQTT_PUB + "/result", str(ret))
+        client.publish(MQTT_PUB + "/result", str(ret), sendQ=True)
     elif v=="C":
-        ret = send_command("CancelShutdown",cmd['C'])  # cancela shutdown ou reestore
+        ret = send_command("CancelShutdown",cmd['C'], sendQ=True)  # cancela shutdown ou reestore
         client.publish(MQTT_PUB + "/result", str(ret))
     elif v=="D":
-        ret = send_command("Cancel",cmd['D'])
+        ret = send_command("Cancel",cmd['D'], sendQ=True)  # cancela Testes
         client.publish(MQTT_PUB + "/result", str(ret))
     elif v=="L":
-        ret = send_command("TestLow",cmd['L'])
+        ret = send_command("TestLow",cmd['L'], sendQ=True)   # testa até low battery
         client.publish(MQTT_PUB + "/result", str(ret))
     elif v=="RAW":
         # envia comando como recebido
@@ -339,6 +338,7 @@ def on_message(client, userdata, msg):
             if len(ret)>0:
                 log.debug("publish: " + MQTT_PUB + "/result : " + str(ret))
                 client.publish(MQTT_PUB + "/result", str(ret))
+                ret = ""
         else:
             log.debug("publish: " + MQTT_PUB + "/result : Invalid command")
             client.publish(MQTT_PUB + "/result", "Invalid command")
@@ -352,7 +352,7 @@ def on_message(client, userdata, msg):
         queryQ()
 
 
-def send_command(cmd_name, cmd_string):
+def send_command(cmd_name, cmd_string, sendQ = False):
     ''' envia um comando para o nobreak '''
     global serialOk
     respHex = ""
@@ -360,7 +360,9 @@ def send_command(cmd_name, cmd_string):
     if serialOk:
         if ECHO: print ("\ncmd_name:", cmd_name)
         if ECHO: print ("cmd_string:", cmd_string)
-        log.debug ("cmd:" + cmd_name + " / str: " + cmd_string)
+        if ECHO: print ("sendQ:", str(sendQ))
+        log.debug ("cmd:" + cmd_name + " / str: " + cmd_string + " / Q: " + str(sendQ))
+        if sendQ: cmd_string = cmd_string + cmd('Q')  # adiciona o Q.
         cmd_bytes = bytearray.fromhex(cmd_string)
         for cmd_byte in cmd_bytes:
             hex_byte = ("{0:02x}".format(cmd_byte))
