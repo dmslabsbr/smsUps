@@ -111,5 +111,6 @@ UPS_ID = 01
 
 atualizar
 
-git reset --hard
-git merge origin/master
+sudo git reset --hard
+sudo git pull
+sudo git merge origin/master
