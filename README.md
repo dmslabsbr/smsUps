@@ -91,6 +91,7 @@ MQTT_PASS = your_mqqt_file
 PORTA = /dev/tty.usbserial-1470, /dev/tty.usbserial-1440, /dev/ttyUSB0
 INTERVALO = 60
 INTERVALO_HASS = 600
+INTERVALO_SER = 1
 ENVIA_JSON = True
 ENVIA_MUITOS = True
 ENVIA_HASS = True

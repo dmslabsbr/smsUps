@@ -24,6 +24,7 @@ MQTT_HASS = "homeassistant"
 PORTA = '/dev/tty.usbserial-1470, /dev/tty.usbserial-1440, /dev/ttyUSB0'
 INTERVALO = 30
 INTERVALO_HASS = 600
+INTERVALO_SER = 1
 INTERVALO_DISCOVERY = 600
 ENVIA_JSON = True
 ENVIA_MUITOS = True
@@ -40,7 +41,7 @@ LOG_LEVEL = logging.DEBUG
 
 
 # CONST
-VERSAO = '0.4'
+VERSAO = '0.5'
 CR = '0D'
 MANUFACTURER = 'dmslabs'
 VIA_DEVICE = 'smsUPS'
@@ -66,9 +67,10 @@ cmd = {'Q':"51 ff ff ff ff b3 0d",  # pega_dados "Q"
          'S': "53 " # Shutdown em n segundos
     }
 
-# VARS
+# GLOBAL VARS
 Connected = False #global variable for the state of the connection
-devices_enviados = False  # Global - Controla quando enviar novamente o cabeçalho para autodiscovery
+gDevices_enviados = { 'b': False, 't':datetime.now() }  # Global - Controla quando enviar novamente o cabeçalho para autodiscovery
+gMqttEnviado = { 'b': False, 't':datetime.now() }  # Global - Controla quando publicar novamente
 serialOk = False
 porta_atual = 0
 
@@ -78,7 +80,7 @@ noBreakInfo = {'name':'',
 noBreak = {'lastinputVac':0,
     'inputVac':0,
     'outputVac':0,
-    'outputpower':0,
+    'outputPower':0,
     'outputHz':0,
     'batterylevel':0,
     'temperatureC':0,
@@ -184,6 +186,7 @@ def get_secrets():
     global PORTA
     global INTERVALO
     global INTERVALO_HASS
+    global INTERVALO_SER
     global ENVIA_JSON
     global ENVIA_MUITOS
     global ENVIA_HASS
@@ -216,6 +219,7 @@ def get_secrets():
     PORTA = get_config(config, 'config','PORTA', PORTA)
     PORTA = PORTA.split(',') # caso mais de uma porta
     INTERVALO = get_config(config, 'config','INTERVALO', INTERVALO, getInt=True)
+    INTERVALO_SER = get_config(config, 'config','INTERVALO_SER', INTERVALO_SER, getInt=True)
     INTERVALO_HASS = get_config(config, 'config','INTERVALO_HASS', INTERVALO_HASS, getInt=True)
     ENVIA_JSON = get_config(config, 'config','ENVIA_JSON', ENVIA_JSON, getBool=True)
     ENVIA_MUITOS = get_config(config, 'config','ENVIA_MUITOS', ENVIA_MUITOS, getBool=True)
@@ -284,13 +288,13 @@ def on_connect(client, userdata, flags, rc):
 
 def on_disconnect(client, userdata, rc):
     global Connected
-    global devices_enviados
+    global gDevices_enviados
     Connected = False
     log.info("disconnecting reason  "  +str(rc))
     print("disconnecting reason  "  +str(rc))
     client.connected_flag=False
     client.disconnect_flag=True
-    devices_enviados = False # Force sending again
+    gDevices_enviados['b'] = False # Force sending again
     status['mqqt'] = "off"
 
 # The callback for when a PUBLISH message is received from the server.
@@ -463,7 +467,7 @@ def dadosNoBreak(lista):
     noBreak['lastinputVac'] = toINT16(lista[1])/10
     noBreak['inputVac'] = toINT16(lista[2])/10
     noBreak['outputVac'] = toINT16(lista[3])/10
-    noBreak['outputpower'] = toINT16(lista[4])/10
+    noBreak['outputPower'] = toINT16(lista[4])/10
     noBreak['outputHz'] = toINT16(lista[5])/10
     noBreak['batterylevel'] = toINT16(lista[6])/10
     noBreak['temperatureC'] = toINT16(lista[7])/10
@@ -493,6 +497,12 @@ def test(raw):
     print (raw)
     mostra_dados(ret)
 
+
+def date_diff_in_Seconds(dt2, dt1):
+    # Get time diference in seconds
+    # not tested for many days.
+  timedelta = dt2 - dt1
+  return timedelta.days * 24 * 3600 + timedelta.seconds
 
 def tempo2hexCMD(i):
     '''  Converte um int para hex para ser enviado '''
@@ -558,9 +568,34 @@ def getNoBreakInfo():
         noBreakInfo['name'] + " / " + 
         noBreakInfo['info'])
 
+
+def publicaDados(upsData):
+    # publica dados no MQTT
+    global status
+    global gMqttEnviado
+    if ENVIA_JSON:
+        jsonUPS = json.dumps(upsData)
+        client.publish(MQTT_PUB + "/json", jsonUPS)
+        gMqttEnviado['b'] = True
+        gMqttEnviado['t'] = datetime.now()
+    if ENVIA_MUITOS:
+        publish_many(MQTT_PUB, upsData)
+        gMqttEnviado['b'] = True
+        gMqttEnviado['t'] = datetime.now()
+    if ENVIA_JSON or ENVIA_HASS or ENVIA_MUITOS:
+        if status['serial'] == 'open' and  \
+           status['ups'] == 'Connected' and \
+           status['mqqt'] == 'on': 
+            status[APP_NAME] = "on"
+        else:
+            status[APP_NAME] = "off"
+        jsonStatus = json.dumps(status)
+        client.publish(MQTT_PUB + "/status", jsonStatus)
+
 def queryQ(raw = ""):
     ''' get ups data and publish'''
     global status
+    global gMqttEnviado
     if raw == "":
         x = send_command("query",cmd['Q'])
     else:
@@ -571,20 +606,12 @@ def queryQ(raw = ""):
         print ('---------')
         print (x)
         mostra_dados(upsData)
-    if ENVIA_JSON:
-        jsonUPS = json.dumps(upsData)
-        client.publish(MQTT_PUB + "/json", jsonUPS)
-    if ENVIA_MUITOS:
-        publish_many(MQTT_PUB, upsData)
-    if ENVIA_JSON or ENVIA_HASS or ENVIA_MUITOS:
-        if status['serial'] == 'open' and  \
-           status['ups'] == 'Connected' and \
-           status['mqqt'] == 'on': 
-            status[APP_NAME] = "on"
-        else:
-            status[APP_NAME] = "off"
-        jsonStatus = json.dumps(status)
-        client.publish(MQTT_PUB + "/status", jsonStatus)
+    if Connected and SMSUPS_SERVER:
+        time_dif = date_diff_in_Seconds(datetime.now(), \
+            gMqttEnviado['t'])
+        if  gMqttEnviado['b'] == False or (time_dif > INTERVALO):
+            gMqttEnviado['b'] ==False
+            publicaDados(upsData)    
     return upsData
 
 def json_remove_vazio(strJson):
@@ -623,7 +650,7 @@ def monta_publica_topico(component, sDict, varComuns):
 def send_hass():
     ''' Envia parametros para incluir device no hass.io '''
     global sensor_dic
-    global devices_enviados
+    global gDevices_enviados
 
     # var comuns
     varComuns = {'sw_version': VERSAO,
@@ -645,7 +672,9 @@ def send_hass():
         print('Componente:' + k[0])
         monta_publica_topico(k[0], sensor_dic[k[0]], varComuns)
 
-    devices_enviados = True
+    gDevices_enviados['b'] = True
+    gDevices_enviados['t'] = datetime.now()
+
 
 def abre_serial():
     ''' abre a porta serial '''
@@ -738,12 +767,18 @@ if SMSUPS_SERVER:
 while True:
     if SMSUPS_SERVER:  # só se for servidor
         queryQ()  # Get UPS data
-        if ENVIA_HASS:
-            if devices_enviados and Connected and SMSUPS_SERVER:
+        if ENVIA_HASS:   # verifica se vai enviar cabeçalho para HASS
+            if (not gDevices_enviados['b']) and Connected and SMSUPS_SERVER:
                 send_hass
+            elif Connected and SMSUPS_SERVER:
+                time_dif = date_diff_in_Seconds(datetime.now(), \
+                  gDevices_enviados['t'])
+                if time_dif > INTERVALO_HASS:
+                    gDevices_enviados['b'] = False
+                    send_hass() 
         if not serialOk:
             serialOk = abre_serial()
-    time.sleep(INTERVALO) # dá um tempo
+    time.sleep(INTERVALO_SER) # dá um tempo
 
 
 # client.loop_forever()
@@ -763,7 +798,7 @@ ser.close()
 	06 - 0x04		- 0XCC   -
 	07 - 0x38 (8)	- 0X  CC - outputVac
 	08 - 0x01		- 0XDD   -
-    09 - 0x22 (")	- 0X  DD - outputpower
+    09 - 0x22 (")	- 0X  DD - outputPower
 	10 - 0x02		- 0XEE   -
 	11 - 0x58 (X)	- 0X  EE - outputHz
 	12 - 0x03		- 0XFF   -
