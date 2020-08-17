@@ -163,6 +163,16 @@ def get_config (config, topic, key, default, getBool = False, getInt = False):
         ret = default
     return ret
 
+def mostraErro(e, nivel=10, msg_add=""):
+    err_msg = msg_add + ' / Error! Code: {c}, Message, {m}'.format(c = type(e).__name__, m = str(e))
+    print(err_msg)
+    if nivel == 10: log.debug(err_msg)
+    if nivel == 20: log.info(err_msg)
+    if nivel == 30: log.warning(err_msg)
+    if nivel == 40: log.error(err_msg)
+    if nivel == 50: log.critical(err_msg)
+    log.warning (err_msg) 
+
 def get_secrets():
     ''' GET configuration data '''
     global MQTT_HOST
@@ -355,6 +365,7 @@ def on_message(client, userdata, msg):
 def send_command(cmd_name, cmd_string, sendQ = False):
     ''' envia um comando para o nobreak '''
     global serialOk
+    global status
     respHex = ""
     log.debug("cmd_name: " + cmd_name + " cmd_str: " + cmd_string)
     if serialOk:
@@ -362,15 +373,24 @@ def send_command(cmd_name, cmd_string, sendQ = False):
         if ECHO: print ("cmd_string:", cmd_string)
         if ECHO: print ("sendQ:", str(sendQ))
         log.debug ("cmd:" + cmd_name + " / str: " + cmd_string + " / Q: " + str(sendQ))
-        if sendQ: cmd_string = cmd_string + cmd('Q')  # adiciona o Q.
+        if sendQ: cmd_string = cmd_string + cmd['Q']  # adiciona o Q.
         cmd_bytes = bytearray.fromhex(cmd_string)
-        for cmd_byte in cmd_bytes:
-            hex_byte = ("{0:02x}".format(cmd_byte))
-            #print (hex_byte)
-            ser.write(bytearray.fromhex(hex_byte))
-            time.sleep(.100)
-        response = ser.read(32)
-        respHex = binascii.hexlify(bytearray(response))
+        try:
+            for cmd_byte in cmd_bytes:
+                hex_byte = ("{0:02x}".format(cmd_byte))
+                ser.write(bytearray.fromhex(hex_byte))
+                time.sleep(.100)
+            response = ser.read(32)
+            respHex = binascii.hexlify(bytearray(response))
+        except serial.SerialException:
+            status['serial'] = 'off'
+            serialOk = ser.is_open()
+            respHex = ""
+        except Exception as e:
+            status['serial'] = 'off'
+            mostraErro(e,30,"send_command")
+            serialOk = ser.is_open()
+            respHex = ""
         if ECHO: print ("response:", respHex)
         log.debug ("response: " + str(respHex))
     else:
@@ -646,9 +666,12 @@ def abre_serial():
         log.debug ("Port " + porta_ser + " - is open: " + str(ser.isOpen()))
         serialOk = ser.isOpen() # True
         status['serial'] = "open"
-    except:
-        print ("I was unable to open the serial port ", porta_ser)
-        log.warning ("I was unable to open the serial port " + porta_ser)
+    except Exception as e:
+        if e.__class__.__name__ == 'SerialException':
+            print ("I was unable to open the serial port ", porta_ser)
+            log.warning ("I was unable to open the serial port " + porta_ser) 
+        else:
+            mostraErro(e, 40, "AbreSerial")
         status['serial'] = 'off'
         serialOk = False
         # verifica outras portas se for servidor
@@ -656,12 +679,9 @@ def abre_serial():
             porta_atual+=1   # add 1
             if porta_atual > len(PORTA)-1:
                 porta_atual = 0
-        '''       Não precisa mais - fica tentando.
-        if SMSUPS_SERVER and not SMSUPS_CLIENTE:
-            print ("I'm going to stop the program.")
-            log.critical ("I'm going to stop the program.")
-            raise SystemExit(0)
-        '''
+            else:
+                # tenta abrir a próxima porta
+                abre_serial()
     return serialOk
 
 

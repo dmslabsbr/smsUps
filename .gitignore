@@ -10,7 +10,7 @@ __pycache__/
 prot*.xml
 protocolos/
 secrets.ini
-launch.json
+.vscode/launch.json
 
 # Distribution / packaging
 .Python
