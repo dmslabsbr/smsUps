@@ -99,6 +99,8 @@ ECHO = True
 MQTT_TOPIC = home/ups/cmd
 MQTT_PUB = home/ups
 MQTT_HASS = homeassistant
+SMSUPS_SERVER = True
+SMSUPS_CLIENTE = True
 LOG_FILE = '/var/tmp/smsUPS.log'
 SHUTDOWN_CMD = '"shutdown /s /t 1", "sudo shutdown now", "systemctl poweroff", "sudo poweroff"'
 

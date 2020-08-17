@@ -15,33 +15,36 @@ from string import Template
 
 # CONFIG
 SECRETS = 'secrets.ini'
+# CONFIG Secrets
 MQTT_HOST = "mqtt.eclipse.org" 
 MQTT_USERNAME  = ""
 MQTT_PASSWORD  = ""
-MQTT_TOPIC  = "$SYS/#"
-MQTT_PUB = "home/ups"
-MQTT_HASS = "homeassistant"
+# CONFIG CONFIG
 PORTA = '/dev/tty.usbserial-1470, /dev/tty.usbserial-1440, /dev/ttyUSB0'
-INTERVALO = 30
+INTERVALO = 120
 INTERVALO_HASS = 600
 INTERVALO_SER = 1
 INTERVALO_DISCOVERY = 600
+MQTT_TOPIC  = "$SYS/#"
+MQTT_PUB = "home/ups"
+MQTT_HASS = "homeassistant"
 ENVIA_JSON = True
 ENVIA_MUITOS = True
 ENVIA_HASS = True
 ECHO = True
-UPS_NAME='UPS'
-UPS_ID = '01'
 SMSUPS_SERVER = True
 SMSUPS_CLIENTE = True
 LOG_FILE = '/var/tmp/smsUPS.log'
-SHUTDOWN_CMD = '"shutdown /s /t 1", "sudo shutdown now", "systemctl poweroff", "sudo poweroff"'
-
 LOG_LEVEL = logging.DEBUG
+SHUTDOWN_CMD = '"shutdown /s /t 1", "sudo shutdown now", "systemctl poweroff", "sudo poweroff"'
+# CONFIG Device
+UPS_NAME='UPS'
+UPS_ID = '01'
+
 
 
 # CONST
-VERSAO = '0.5'
+VERSAO = '0.6'
 CR = '0D'
 MANUFACTURER = 'dmslabs'
 VIA_DEVICE = 'smsUPS'
@@ -63,8 +66,10 @@ cmd = {'Q':"51 ff ff ff ff b3 0d",  # pega_dados "Q"
         'T9':"54 03 84 00 00 25 0d", # t 900 s
         'C':"43 ff ff ff ff c1 0d", # Cancelamento de Shutdown ou restore
         'L':"4C ff ff ff ff", # teste bateria baixa "L" 
-         'R': "52 00 C8 27 0F B0 0D", # Shutdown e restore
-         'S': "53 " # Shutdown em n segundos
+        'R': "52 00 C8 27 0F B0 0D", # Shutdown e restore
+        "zzz": "52 00 C8 0F EF E0 OD",  # 18/08/2020 19:58  - 15/08 - 23:59:58
+        "zz1": "52 01 2C 27 0F 4b OD",  # 16/08 - 00:16:30 - só shutdown
+        'S': "53 " # Shutdown em n segundos
     }
 
 # GLOBAL VARS
@@ -168,11 +173,11 @@ def get_config (config, topic, key, default, getBool = False, getInt = False):
 def mostraErro(e, nivel=10, msg_add=""):
     err_msg = msg_add + ' / Error! Code: {c}, Message, {m}'.format(c = type(e).__name__, m = str(e))
     print(err_msg)
-    if nivel == 10: log.debug(err_msg)
-    if nivel == 20: log.info(err_msg)
-    if nivel == 30: log.warning(err_msg)
-    if nivel == 40: log.error(err_msg)
-    if nivel == 50: log.critical(err_msg)
+    if nivel == logging.DEBUG: log.debug(err_msg)      # 10
+    if nivel == logging.INFO: log.info(err_msg)       # 20
+    if nivel == logging.WARNING: log.warning(err_msg)    # 30
+    if nivel == logging.ERROR: log.error(err_msg)      # 40
+    if nivel == logging.CRITICAL: log.critical(err_msg)   # 50
     log.warning (err_msg) 
 
 def get_secrets():
@@ -196,6 +201,7 @@ def get_secrets():
     global SMSUPS_SERVER
     global SMSUPS_CLIENTE
     global LOG_FILE
+    global LOG_LEVEL
     global SHUTDOWN_CMD
     print ("Getting config file.")
     #log.debug("Getting config file.")
@@ -230,6 +236,7 @@ def get_secrets():
     SMSUPS_SERVER = get_config(config, 'config', 'SMSUPS_SERVER', SMSUPS_SERVER, getBool=True)
     SMSUPS_CLIENTE = get_config(config, 'config', 'SMSUPS_CLIENTE', SMSUPS_CLIENTE, getBool=True)
     LOG_FILE = get_config(config, 'config', 'LOG_FILE', LOG_FILE)
+    LOG_LEVEL = get_config(config, 'config', 'LOG_LEVEL', LOG_LEVEL, getInt=True)
     SHUTDOWN_CMD = get_config(config, 'config', 'SHUTDOWN_CMD', SHUTDOWN_CMD)
     SHUTDOWN_CMD = SHUTDOWN_CMD.split(',')
 
@@ -611,6 +618,7 @@ def queryQ(raw = ""):
             gMqttEnviado['t'])
         if  gMqttEnviado['b'] == False or (time_dif > INTERVALO):
             gMqttEnviado['b'] ==False
+            log.debug('Publica Dados')
             publicaDados(upsData)    
     return upsData
 
@@ -627,8 +635,9 @@ def json_remove_vazio(strJson):
 def monta_publica_topico(component, sDict, varComuns):
     ''' monta e envia topico '''
     key_todos = sDict['todos']
-    sDict.pop('todos')
-    for key,dic in sDict.items():
+    newDict = sDict
+    newDict.pop('todos')
+    for key,dic in newDict.items():
         print(key,dic)
         varComuns['uniq_id']=varComuns['identifiers'] + "_" + key
         if not('val_tpl' in dic):
@@ -732,6 +741,7 @@ log.debug("** SMS UPS v." + VERSAO)
 log.debug("Starting up...")
 
 get_secrets()
+log.setLevel(LOG_LEVEL)
 
 # MQTT Start
 log.info("Starting MQTT " + MQTT_HOST)
@@ -775,6 +785,7 @@ while True:
                   gDevices_enviados['t'])
                 if time_dif > INTERVALO_HASS:
                     gDevices_enviados['b'] = False
+                    log.debug('Send Hass')
                     send_hass() 
         if not serialOk:
             serialOk = abre_serial()

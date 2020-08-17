@@ -16,8 +16,8 @@
    },
    "outputPower":{
       "name":"outputPower",
-      "icon":"mdi:power-socket",
-      "unit_of_measurement":"Hz"
+      "icon":"mdi:fuel",
+      "unit_of_measurement":"%"
    },
    "batterylevel":{
       "name":"batterylevel",
