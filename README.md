@@ -36,6 +36,14 @@ sudo systemctl status smsUPS.service
 sudo systemctl stop smsUPS.service
 
 
+Install as service - OSX
+
+cp smsUPS_laucher.plist ~/Library/LaunchAgents/
+launchctl load ~/Library/LaunchAgents/smsUPS_laucher.plist
+launchctl start dmslabs.python.smsUPS
+launchctl stop dmslabs.python.smsUPS
+launchctl unload dmslabs.python.smsUPS
+
 
 Commands
 
@@ -89,9 +97,9 @@ MQTT_PASS = your_mqqt_file
 
 [config]
 PORTA = /dev/tty.usbserial-1470, /dev/tty.usbserial-1440, /dev/ttyUSB0
-INTERVALO = 60
+INTERVALO_MQTT = 60
 INTERVALO_HASS = 600
-INTERVALO_SER = 1
+INTERVALO_SERIAL = 3
 ENVIA_JSON = True
 ENVIA_MUITOS = True
 ENVIA_HASS = True

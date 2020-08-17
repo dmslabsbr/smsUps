@@ -21,9 +21,9 @@ MQTT_USERNAME  = ""
 MQTT_PASSWORD  = ""
 # CONFIG CONFIG
 PORTA = '/dev/tty.usbserial-1470, /dev/tty.usbserial-1440, /dev/ttyUSB0'
-INTERVALO = 120
+INTERVALO_MQTT = 120
 INTERVALO_HASS = 600
-INTERVALO_SER = 1
+INTERVALO_SERIAL = 3
 INTERVALO_DISCOVERY = 600
 MQTT_TOPIC  = "$SYS/#"
 MQTT_PUB = "home/ups"
@@ -44,7 +44,7 @@ UPS_ID = '01'
 
 
 # CONST
-VERSAO = '0.6'
+VERSAO = '0.9'
 CR = '0D'
 MANUFACTURER = 'dmslabs'
 VIA_DEVICE = 'smsUPS'
@@ -168,6 +168,7 @@ def get_config (config, topic, key, default, getBool = False, getInt = False):
         if getInt or type(default) is int: ret = config.getint(topic, key)
     except:
         ret = default
+        log.debug('Config: ' + key + " use default: " + str(default))
     return ret
 
 def mostraErro(e, nivel=10, msg_add=""):
@@ -189,9 +190,9 @@ def get_secrets():
     global MQTT_PUB
     global MQTT_HASS
     global PORTA
-    global INTERVALO
+    global INTERVALO_MQTT
     global INTERVALO_HASS
-    global INTERVALO_SER
+    global INTERVALO_SERIAL
     global ENVIA_JSON
     global ENVIA_MUITOS
     global ENVIA_HASS
@@ -224,8 +225,8 @@ def get_secrets():
     MQTT_HASS = get_config(config, 'config', 'MQTT_HASS', MQTT_HASS)
     PORTA = get_config(config, 'config','PORTA', PORTA)
     PORTA = PORTA.split(',') # caso mais de uma porta
-    INTERVALO = get_config(config, 'config','INTERVALO', INTERVALO, getInt=True)
-    INTERVALO_SER = get_config(config, 'config','INTERVALO_SER', INTERVALO_SER, getInt=True)
+    INTERVALO_MQTT = get_config(config, 'config','INTERVALO_MQTT', INTERVALO_MQTT, getInt=True)
+    INTERVALO_SERIAL = get_config(config, 'config','INTERVALO_SERIAL', INTERVALO_SERIAL, getInt=True)
     INTERVALO_HASS = get_config(config, 'config','INTERVALO_HASS', INTERVALO_HASS, getInt=True)
     ENVIA_JSON = get_config(config, 'config','ENVIA_JSON', ENVIA_JSON, getBool=True)
     ENVIA_MUITOS = get_config(config, 'config','ENVIA_MUITOS', ENVIA_MUITOS, getBool=True)
@@ -244,13 +245,15 @@ def get_secrets():
         SHUTDOWN_CMD[i] = SHUTDOWN_CMD[i].replace('"','').replace("'", '')
     if ENVIA_HASS: ENVIA_JSON = True
 
-def shutdown_computer():
+def shutdown_computer(s = 30):
     ''' try to shutdown the computer '''
     log.warning('tring to shutdown the computer')
     import sys
     p = 'sys.platform: ' + sys.platform
     print (p)
     log.info(p)
+    log.info('Going to shutdown in ' + s + ' seconds.')
+    time.sleep(s)
     if sys.platform == 'win32':
         import ctypes
         user32 = ctypes.WinDLL('user32')
@@ -259,7 +262,10 @@ def shutdown_computer():
         import os
         for i in range(len(SHUTDOWN_CMD)):
             command = SHUTDOWN_CMD[i]  # trying many commands
-            os.system(command) # 'sudo shutdown now'
+            log.info('* Trying...' + command)
+            # os.system(command) # 'sudo shutdown now'
+            ret = os.popen(command)
+            log.debug(': ' + ret)
 
 # The callback for when the client receives a CONNACK response from the server.
 def on_connect(client, userdata, flags, rc):
@@ -616,8 +622,8 @@ def queryQ(raw = ""):
     if Connected and SMSUPS_SERVER:
         time_dif = date_diff_in_Seconds(datetime.now(), \
             gMqttEnviado['t'])
-        if  gMqttEnviado['b'] == False or (time_dif > INTERVALO):
-            gMqttEnviado['b'] ==False
+        if  gMqttEnviado['b'] == False or (time_dif > INTERVALO_MQTT):
+            gMqttEnviado['b'] = False
             log.debug('Publica Dados')
             publicaDados(upsData)    
     return upsData
@@ -635,7 +641,7 @@ def json_remove_vazio(strJson):
 def monta_publica_topico(component, sDict, varComuns):
     ''' monta e envia topico '''
     key_todos = sDict['todos']
-    newDict = sDict
+    newDict = sDict.copy()
     newDict.pop('todos')
     for key,dic in newDict.items():
         print(key,dic)
@@ -683,6 +689,7 @@ def send_hass():
 
     gDevices_enviados['b'] = True
     gDevices_enviados['t'] = datetime.now()
+    log.debug('Hass Sended')
 
 
 def abre_serial():
@@ -701,7 +708,7 @@ def abre_serial():
             bytesize=serial.EIGHTBITS,
             timeout = 1)
         print ("Porta: " + porta_ser + " - " + str(ser.isOpen()))
-        log.debug ("Port " + porta_ser + " - is open: " + str(ser.isOpen()))
+        log.info ("Port " + porta_ser + " - is open: " + str(ser.isOpen()))
         serialOk = ser.isOpen() # True
         status['serial'] = "open"
     except Exception as e:
@@ -742,6 +749,16 @@ log.debug("Starting up...")
 
 get_secrets()
 log.setLevel(LOG_LEVEL)
+
+# info
+osEnv = os.environ
+log.info("os.name: " + os.name)
+log.info("os.user: " + osEnv['USER'])
+log.info("os.getlogin: " + os.getlogin())
+log.info("os.uname: " + str(os.uname()))
+log.info("whoami: " + os.popen('whoami').read())
+log.info("VIRTUAL_ENV: " + osEnv['VIRTUAL_ENV'])
+
 
 # MQTT Start
 log.info("Starting MQTT " + MQTT_HOST)
@@ -785,11 +802,10 @@ while True:
                   gDevices_enviados['t'])
                 if time_dif > INTERVALO_HASS:
                     gDevices_enviados['b'] = False
-                    log.debug('Send Hass')
                     send_hass() 
         if not serialOk:
             serialOk = abre_serial()
-    time.sleep(INTERVALO_SER) # dá um tempo
+    time.sleep(INTERVALO_SERIAL) # dá um tempo
 
 
 # client.loop_forever()
