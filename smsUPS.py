@@ -315,7 +315,7 @@ def on_connect(client, userdata, flags, rc):
     else:
         status['mqqt'] = "off"
 
-def get_ip():
+def get_ip(change_dot = False):
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
         # doesn't even have to be reachable
@@ -325,7 +325,8 @@ def get_ip():
         IP = '127.0.0.1'
     finally:
         s.close()
-    return IP
+    if change_dot: IP=IP.replace('.','-')
+    return str(IP)
 
 def on_disconnect(client, userdata, rc):
     global Connected
@@ -790,7 +791,7 @@ log.debug("********** SMS UPS v." + VERSAO)
 log.debug("Starting up...")
 log.debug("SMSUPS_SERVER: " + str(SMSUPS_SERVER))
 log.debug("SMSUPS_CLIENTE: " + str(SMSUPS_CLIENTE))
-log.debug("IP: ") + get_ip()
+log.debug("IP: " + get_ip())
 print ("SMSUPS_SERVER: " + str(SMSUPS_SERVER))
 print ("SMSUPS_CLIENTE: " + str(SMSUPS_CLIENTE))
 print ("IP: " + get_ip())
