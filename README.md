@@ -96,6 +96,11 @@ Send json to /home/ups/cmd
          "cmd": "CMD",
          "val": "49ffffffff"
        }
+{cmd: "SHUTDOWN", val: ""} - Envia sinal para desligar maquinas rodando os clientes.
+   ex: {
+         "cmd": "SHUTDOWN",
+         "val": ""
+       }
 
 
 
@@ -129,6 +134,7 @@ SHUTDOWN_CMD = '"shutdown /s /t 1", "sudo shutdown now", "systemctl poweroff", "
 [device]
 UPS_NAME = SMS
 UPS_ID = 01
+UPS_BATERY_LEVEL = 60
 
 
 

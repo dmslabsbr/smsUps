@@ -40,7 +40,7 @@ SHUTDOWN_CMD = '"sudo shutdown -h now", "sudo shutdown now", "systemctl poweroff
 # CONFIG Device
 UPS_NAME='UPS'
 UPS_ID = '01'
-
+UPS_BATERY_LEVEL = 60
 
 
 # CONST
@@ -50,6 +50,7 @@ MANUFACTURER = 'dmslabs'
 VIA_DEVICE = 'smsUPS'
 NODE_ID = 'dmslabs'
 APP_NAME = 'smsUPS'
+MQTT_CMD_SHUTDOWN = '{"cmd": "SHUTDOWN","val": ""}'
 
 respostaH = [None] * 18
 
@@ -199,6 +200,7 @@ def get_secrets():
     global ECHO
     global UPS_NAME
     global UPS_ID
+    global UPS_BATERY_LEVEL
     global SMSUPS_SERVER
     global SMSUPS_CLIENTE
     global LOG_FILE
@@ -233,7 +235,8 @@ def get_secrets():
     ENVIA_HASS = get_config(config, 'config','ENVIA_HASS', ENVIA_HASS, getBool=True)
     ECHO = get_config(config, 'config','ECHO', ECHO, getBool=True)
     UPS_NAME = get_config(config, 'device','UPS_NAME', UPS_NAME) 
-    UPS_ID = get_config(config, 'device','UPS_ID', UPS_ID) 
+    UPS_ID = get_config(config, 'device','UPS_ID', UPS_ID)
+    UPS_BATERY_LEVEL = get_config(config, 'device','UPS_BATERY_LEVEL', UPS_BATERY_LEVEL, getInt=True) 
     SMSUPS_SERVER = get_config(config, 'config', 'SMSUPS_SERVER', SMSUPS_SERVER, getBool=True)
     SMSUPS_CLIENTE = get_config(config, 'config', 'SMSUPS_CLIENTE', SMSUPS_CLIENTE, getBool=True)
     LOG_FILE = get_config(config, 'config', 'LOG_FILE', LOG_FILE)
@@ -624,6 +627,8 @@ def queryQ(raw = ""):
         print ('---------')
         print (x)
         mostra_dados(upsData)
+    if SMSUPS_SERVER:
+        checkBatteryLevel(upsData)  # verifica bateria
     if Connected and SMSUPS_SERVER:
         time_dif = date_diff_in_Seconds(datetime.now(), \
             gMqttEnviado['t'])
@@ -632,6 +637,14 @@ def queryQ(raw = ""):
             log.debug('Publica Dados')
             publicaDados(upsData)    
     return upsData
+
+
+def checkBatteryLevel(upsData)
+    ''' check if battery still enough '''
+    bat = upsData['batterylevel']
+    if bat < UPS_BATERY_LEVEL:
+        # bateria acabando.
+        client.publish(MQTT_PUB + "/cmd", MQTT_CMD_SHUTDOWN )
 
 def json_remove_vazio(strJson):
     ''' remove linhas / elementos vazios de uma string Json '''
