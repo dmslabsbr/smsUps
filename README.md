@@ -144,6 +144,9 @@ sudo systemctl stop smsUPS.service
 sudo git reset --hard
 sudo git pull
 sudo git merge origin/master
+sudo rm /var/tmp/smsUPS.*
+sudo systemctl start smsUPS.service
+sudo systemctl status smsUPS.service
 
 
 

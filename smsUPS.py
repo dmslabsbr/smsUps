@@ -663,7 +663,7 @@ def queryQ(raw = ""):
     return upsData
 
 
-def checkBatteryLevel(upsData)
+def checkBatteryLevel(upsData):
     ''' check if battery still enough '''
     bat = upsData['batterylevel']
     if bat < UPS_BATERY_LEVEL:
