@@ -38,12 +38,25 @@ sudo systemctl stop smsUPS.service
 
 Install as service - OSX
 
+* run as current user
 cp smsUPS_laucher.plist ~/Library/LaunchAgents/
 launchctl load ~/Library/LaunchAgents/smsUPS_laucher.plist
 launchctl start dmslabs.python.smsUPS
 launchctl stop dmslabs.python.smsUPS
 launchctl unload dmslabs.python.smsUPS
+launchctl remove dmslabs.python.smsUPS
+launchctl list | grep smsUPS
+rm /var/tmp/smsUPS.*
 
+* run as root
+sudo cp smsUPS_laucher.plist  /Library/LaunchDaemons
+sudo launchctl load /Library/LaunchDaemons/smsUPS_laucher.plist
+sudo launchctl start dmslabs.python.smsUPS
+sudo launchctl stop dmslabs.python.smsUPS
+sudo launchctl unload dmslabs.python.smsUPS
+sudo launchctl remove dmslabs.python.smsUPS
+sudo launchctl list | grep smsUPS
+sudo rm /var/tmp/smsUPS.*
 
 Commands
 
@@ -119,8 +132,14 @@ UPS_ID = 01
 
 
 
-atualizar
+** atualizar Rasbian
 
+sudo systemctl stop smsUPS.service
 sudo git reset --hard
 sudo git pull
 sudo git merge origin/master
+
+
+
+Outros comandos para desligar o iMac (osx)
+osascript -e 'tell app "System Events" to shut down'

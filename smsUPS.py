@@ -36,7 +36,7 @@ SMSUPS_SERVER = True
 SMSUPS_CLIENTE = True
 LOG_FILE = '/var/tmp/smsUPS.log'
 LOG_LEVEL = logging.DEBUG
-SHUTDOWN_CMD = '"shutdown /s /t 1", "sudo shutdown now", "systemctl poweroff", "sudo poweroff"'
+SHUTDOWN_CMD = '"sudo shutdown -h now", "sudo shutdown now", "systemctl poweroff", "sudo poweroff"'
 # CONFIG Device
 UPS_NAME='UPS'
 UPS_ID = '01'
@@ -44,7 +44,7 @@ UPS_ID = '01'
 
 
 # CONST
-VERSAO = '0.9'
+VERSAO = '0.13'
 CR = '0D'
 MANUFACTURER = 'dmslabs'
 VIA_DEVICE = 'smsUPS'
@@ -252,7 +252,10 @@ def shutdown_computer(s = 30):
     p = 'sys.platform: ' + sys.platform
     print (p)
     log.info(p)
-    log.info('Going to shutdown in ' + s + ' seconds.')
+    p = 'Going to shutdown in ' + str(s) + ' seconds.'
+    log.info(p)
+    print (p)
+    client.publish(MQTT_PUB + "/result", p)
     time.sleep(s)
     if sys.platform == 'win32':
         import ctypes
@@ -263,9 +266,11 @@ def shutdown_computer(s = 30):
         for i in range(len(SHUTDOWN_CMD)):
             command = SHUTDOWN_CMD[i]  # trying many commands
             log.info('* Trying...' + command)
-            # os.system(command) # 'sudo shutdown now'
-            ret = os.popen(command)
-            log.debug(': ' + ret)
+            print('* Trying...' + command)
+            os.system(command) # 'sudo shutdown now'
+            #ret = os.popen(command).read()
+            #log.debug(': ' + str(ret))
+            #print(": " + str(ret))
 
 # The callback for when the client receives a CONNACK response from the server.
 def on_connect(client, userdata, flags, rc):
@@ -733,7 +738,7 @@ def abre_serial():
 
 # APP START
 
-print("** SMS UPS v." + VERSAO)
+print("********** SMS UPS v." + VERSAO)
 print ("Starting up...")
 
 #LOG
@@ -744,21 +749,28 @@ hdlr.setFormatter(formatter)
 log.addHandler(hdlr) 
 log.setLevel(LOG_LEVEL)
 
-log.debug("** SMS UPS v." + VERSAO)
+log.debug("********** SMS UPS v." + VERSAO)
 log.debug("Starting up...")
+log.debug("SMSUPS_SERVER: " + str(SMSUPS_SERVER))
+log.debug("SMSUPS_CLIENTE: " + str(SMSUPS_CLIENTE))
+print ("SMSUPS_SERVER: " + str(SMSUPS_SERVER))
+print ("SMSUPS_CLIENTE: " + str(SMSUPS_CLIENTE))
+
 
 get_secrets()
 log.setLevel(LOG_LEVEL)
 
 # info
-osEnv = os.environ
-log.info("os.name: " + os.name)
-log.info("os.user: " + osEnv['USER'])
-log.info("os.getlogin: " + os.getlogin())
-log.info("os.uname: " + str(os.uname()))
-log.info("whoami: " + os.popen('whoami').read())
-log.info("VIRTUAL_ENV: " + osEnv['VIRTUAL_ENV'])
-
+try:
+    osEnv = os.environ
+    log.info("os.name: " + str(os.name))
+    log.info("os.getlogin: " + str(os.getlogin()))
+    log.info("os.uname: " + str(os.uname()))
+    log.info("whoami: " + str(os.popen('whoami').read()))
+except Exception as e:
+    mostraErro(e, 10, 'info')
+# if 'VIRTUAL_ENV' in osEnv
+# log.info("VIRTUAL_ENV: " + osEnv['VIRTUAL_ENV'])
 
 # MQTT Start
 log.info("Starting MQTT " + MQTT_HOST)

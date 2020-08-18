@@ -6,7 +6,7 @@
     <string>dmslabs.python.smsUPS</string>
     <key>ProgramArguments</key>
     <array>
-        <string>/Users/dms/Dropbox/dms/Source-py/smsUps/bin/python3</string>
+        <string>/Users/dms/Dropbox/dms/Source-py/smsUps/smsUPS/bin/python3</string>
         <string>/Users/dms/Dropbox/dms/Source-py/smsUps/smsUps.py</string>
     </array>
     <key>WorkingDirectory</key>
