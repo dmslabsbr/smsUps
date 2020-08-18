@@ -9,6 +9,8 @@ import paho.mqtt.client as mqtt
 import configparser
 import json
 import logging
+import uuid
+import socket
 from datetime import datetime
 from string import Template
 
@@ -44,13 +46,14 @@ UPS_BATERY_LEVEL = 60
 
 
 # CONST
-VERSAO = '0.13'
+VERSAO = '0.14'
 CR = '0D'
 MANUFACTURER = 'dmslabs'
 VIA_DEVICE = 'smsUPS'
 NODE_ID = 'dmslabs'
 APP_NAME = 'smsUPS'
 MQTT_CMD_SHUTDOWN = '{"cmd": "SHUTDOWN","val": ""}'
+UUID = uuid.uuid1()
 
 respostaH = [None] * 18
 
@@ -288,6 +291,11 @@ def on_connect(client, userdata, flags, rc):
         # Subscribing in on_connect() means that if we lose the connection and
         # reconnect then subscriptions will be renewed.
         client.subscribe(MQTT_TOPIC)
+        # Mostra clientes
+        client.publish(MQTT_PUB + "/clients/" + get_ip() + '/UUID', UUID)
+        client.publish(MQTT_PUB + "/clients/" + get_ip() + '/connected', 'on') 
+        client.publish(MQTT_PUB + "/clients/" + get_ip() + '/time', datetime.now())
+        client.publish(MQTT_PUB + "/clients/" + get_ip() + '/version', VERSAO)
     else:
         tp_c = {0: "Connection successful",
                 1: "Connection refused – incorrect protocol version",
@@ -307,6 +315,18 @@ def on_connect(client, userdata, flags, rc):
     else:
         status['mqqt'] = "off"
 
+def get_ip():
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        # doesn't even have to be reachable
+        s.connect(('192.168.1.1', 1))
+        IP = s.getsockname()[0]
+    except Exception:
+        IP = '127.0.0.1'
+    finally:
+        s.close()
+    return IP
+
 def on_disconnect(client, userdata, rc):
     global Connected
     global gDevices_enviados
@@ -317,6 +337,10 @@ def on_disconnect(client, userdata, rc):
     client.disconnect_flag=True
     gDevices_enviados['b'] = False # Force sending again
     status['mqqt'] = "off"
+    # mostra cliente desconectado
+    client.publish(MQTT_PUB + "/clients/" + get_ip() + '/UUID', UUID)
+    client.publish(MQTT_PUB + "/clients/" + get_ip() + '/connected', 'off')
+    client.publish(MQTT_PUB + "/clients/" + get_ip() + '/time', datetime.now()) 
 
 # The callback for when a PUBLISH message is received from the server.
 def on_message(client, userdata, msg):
@@ -766,8 +790,10 @@ log.debug("********** SMS UPS v." + VERSAO)
 log.debug("Starting up...")
 log.debug("SMSUPS_SERVER: " + str(SMSUPS_SERVER))
 log.debug("SMSUPS_CLIENTE: " + str(SMSUPS_CLIENTE))
+log.debug("IP: ") + get_ip()
 print ("SMSUPS_SERVER: " + str(SMSUPS_SERVER))
 print ("SMSUPS_CLIENTE: " + str(SMSUPS_CLIENTE))
+print ("IP: " + get_ip())
 
 
 get_secrets()
