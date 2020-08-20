@@ -23,9 +23,10 @@ MQTT_USERNAME  = ""
 MQTT_PASSWORD  = ""
 # CONFIG CONFIG
 PORTA = '/dev/tty.usbserial-1470, /dev/tty.usbserial-1440, /dev/ttyUSB0'
-INTERVALO_MQTT = 120
-INTERVALO_HASS = 600
-INTERVALO_SERIAL = 3
+INTERVALO_MQTT = 120   #   How often to send data to the MQTT server?
+INTERVALO_HASS = 600   # How often to send device information in a format compatible with Home Asssistant MQTT discovery?
+INTERVALO_SERIAL = 3 # How often do I read UPS information on the serial port?
+SERIAL_CHECK_ALWAYS = 'temperatureC, batterylevel'
 INTERVALO_DISCOVERY = 600
 MQTT_TOPIC  = "$SYS/#"
 MQTT_PUB = "home/ups"
@@ -46,7 +47,7 @@ UPS_BATERY_LEVEL = 60
 
 
 # CONST
-VERSAO = '0.14'
+VERSAO = '0.15'
 CR = '0D'
 MANUFACTURER = 'dmslabs'
 VIA_DEVICE = 'smsUPS'
@@ -104,6 +105,8 @@ noBreak = {'lastinputVac':0,
     'time': "",
     'info': "",
     'name': ''}
+
+gNoBreakLast = noBreak.copy()
 
 status = {"ip":"?",
           "serial": False,
@@ -163,7 +166,7 @@ device_dict = ''' "name": "$device_name",
 
 sensor_dic = dict() # {}
 
-def get_config (config, topic, key, default, getBool = False, getInt = False):
+def get_config (config, topic, key, default, getBool = False, getInt = False, split = False):
     ''' Read config data '''
     ret = default
     try:
@@ -173,6 +176,7 @@ def get_config (config, topic, key, default, getBool = False, getInt = False):
     except:
         ret = default
         log.debug('Config: ' + key + " use default: " + str(default))
+    if split: ret = ret.split(',')
     return ret
 
 def mostraErro(e, nivel=10, msg_add=""):
@@ -197,6 +201,7 @@ def get_secrets():
     global INTERVALO_MQTT
     global INTERVALO_HASS
     global INTERVALO_SERIAL
+    global SERIAL_CHECK_ALWAYS
     global ENVIA_JSON
     global ENVIA_MUITOS
     global ENVIA_HASS
@@ -228,11 +233,11 @@ def get_secrets():
     MQTT_TOPIC = get_config(config, 'config', 'MQTT_TOPIC', MQTT_TOPIC)
     MQTT_PUB = get_config(config, 'config', 'MQTT_PUB', MQTT_PUB)
     MQTT_HASS = get_config(config, 'config', 'MQTT_HASS', MQTT_HASS)
-    PORTA = get_config(config, 'config','PORTA', PORTA)
-    PORTA = PORTA.split(',') # caso mais de uma porta
+    PORTA = get_config(config, 'config','PORTA', PORTA, split = True) # caso mais de uma porta
     INTERVALO_MQTT = get_config(config, 'config','INTERVALO_MQTT', INTERVALO_MQTT, getInt=True)
     INTERVALO_SERIAL = get_config(config, 'config','INTERVALO_SERIAL', INTERVALO_SERIAL, getInt=True)
     INTERVALO_HASS = get_config(config, 'config','INTERVALO_HASS', INTERVALO_HASS, getInt=True)
+    SERIAL_CHECK_ALWAYS =  get_config(config, 'config','INTERVALO_HASS', SERIAL_CHECK_ALWAYS, split = True)
     ENVIA_JSON = get_config(config, 'config','ENVIA_JSON', ENVIA_JSON, getBool=True)
     ENVIA_MUITOS = get_config(config, 'config','ENVIA_MUITOS', ENVIA_MUITOS, getBool=True)
     ENVIA_HASS = get_config(config, 'config','ENVIA_HASS', ENVIA_HASS, getBool=True)
@@ -244,8 +249,7 @@ def get_secrets():
     SMSUPS_CLIENTE = get_config(config, 'config', 'SMSUPS_CLIENTE', SMSUPS_CLIENTE, getBool=True)
     LOG_FILE = get_config(config, 'config', 'LOG_FILE', LOG_FILE)
     LOG_LEVEL = get_config(config, 'config', 'LOG_LEVEL', LOG_LEVEL, getInt=True)
-    SHUTDOWN_CMD = get_config(config, 'config', 'SHUTDOWN_CMD', SHUTDOWN_CMD)
-    SHUTDOWN_CMD = SHUTDOWN_CMD.split(',')
+    SHUTDOWN_CMD = get_config(config, 'config', 'SHUTDOWN_CMD', SHUTDOWN_CMD, split = True)
 
     for i in range(len(SHUTDOWN_CMD)):
         SHUTDOWN_CMD[i] = SHUTDOWN_CMD[i].replace('"','').replace("'", '')
@@ -642,27 +646,44 @@ def queryQ(raw = ""):
     ''' get ups data and publish'''
     global status
     global gMqttEnviado
+    global gNoBreakLast
     if raw == "":
         x = send_command("query",cmd['Q'])
     else:
         x = raw
     lista_dados = trataRetorno(x)
     upsData = dadosNoBreak(lista_dados)
+    if gNoBreakLast['time'] == '': gNoBreakLast = upsData.copy()
     if ECHO:
         print ('---------')
         print (x)
         mostra_dados(upsData)
     if SMSUPS_SERVER:
-        checkBatteryLevel(upsData)  # verifica bateria
+        checkBatteryLevel(upsData)  # check battery level
     if Connected and SMSUPS_SERVER:
+        blPublica = False
         time_dif = date_diff_in_Seconds(datetime.now(), \
             gMqttEnviado['t'])
         if  gMqttEnviado['b'] == False or (time_dif > INTERVALO_MQTT):
             gMqttEnviado['b'] = False
+            blPublica = True
+        dataChanged = checkDataChange(upsData, gNoBreakLast)
+        if len(dataChanged) != 0:
+            blPublica = True
+            gNoBreakLast = upsData.copy()
+        if blPublica:
             log.debug('Publica Dados')
-            publicaDados(upsData)    
+            publicaDados(upsData)
     return upsData
 
+def checkDataChange(now, last, tags = SERIAL_CHECK_ALWAYS):
+    '''  Verifica se os parametros alteraram '''
+    ret = list()
+    for i in tags:
+        itemN = now[i]
+        itemL = last[i]
+        if itemN != itemL: ret.append(i)
+    return ret
 
 def checkBatteryLevel(upsData):
     ''' check if battery still enough '''
