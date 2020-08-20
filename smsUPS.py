@@ -26,7 +26,7 @@ PORTA = '/dev/tty.usbserial-1470, /dev/tty.usbserial-1440, /dev/ttyUSB0'
 INTERVALO_MQTT = 120   #   How often to send data to the MQTT server?
 INTERVALO_HASS = 600   # How often to send device information in a format compatible with Home Asssistant MQTT discovery?
 INTERVALO_SERIAL = 3 # How often do I read UPS information on the serial port?
-SERIAL_CHECK_ALWAYS = 'temperatureC, batterylevel'
+SERIAL_CHECK_ALWAYS = 'temperatureC, batterylevel, UpsOk, BateriaBaixa, BateriaEmUso'
 INTERVALO_DISCOVERY = 600
 MQTT_TOPIC  = "$SYS/#"
 MQTT_PUB = "home/ups"
@@ -54,7 +54,7 @@ VIA_DEVICE = 'smsUPS'
 NODE_ID = 'dmslabs'
 APP_NAME = 'smsUPS'
 MQTT_CMD_SHUTDOWN = '{"cmd": "SHUTDOWN","val": ""}'
-UUID = uuid.uuid1()
+UUID = str(uuid.uuid1())
 
 respostaH = [None] * 18
 
@@ -112,6 +112,8 @@ status = {"ip":"?",
           "serial": False,
           "ups": False,
           "mqqt": False}
+
+statusLast = status.copy()
           
 
 json_hass = {"sensor": '''
@@ -176,7 +178,11 @@ def get_config (config, topic, key, default, getBool = False, getInt = False, sp
     except:
         ret = default
         log.debug('Config: ' + key + " use default: " + str(default))
-    if split: ret = ret.split(',')
+    if split:
+        ret = ret.split(',')
+        for i in range(len(ret)):
+            ret[i] = ret[i].replace('"','').replace("'", '')
+            ret[i] = ret[i].strip()
     return ret
 
 def mostraErro(e, nivel=10, msg_add=""):
@@ -237,7 +243,7 @@ def get_secrets():
     INTERVALO_MQTT = get_config(config, 'config','INTERVALO_MQTT', INTERVALO_MQTT, getInt=True)
     INTERVALO_SERIAL = get_config(config, 'config','INTERVALO_SERIAL', INTERVALO_SERIAL, getInt=True)
     INTERVALO_HASS = get_config(config, 'config','INTERVALO_HASS', INTERVALO_HASS, getInt=True)
-    SERIAL_CHECK_ALWAYS =  get_config(config, 'config','INTERVALO_HASS', SERIAL_CHECK_ALWAYS, split = True)
+    SERIAL_CHECK_ALWAYS =  get_config(config, 'config','SERIAL_CHECK_ALWAYS', SERIAL_CHECK_ALWAYS, split = True)
     ENVIA_JSON = get_config(config, 'config','ENVIA_JSON', ENVIA_JSON, getBool=True)
     ENVIA_MUITOS = get_config(config, 'config','ENVIA_MUITOS', ENVIA_MUITOS, getBool=True)
     ENVIA_HASS = get_config(config, 'config','ENVIA_HASS', ENVIA_HASS, getBool=True)
@@ -251,8 +257,6 @@ def get_secrets():
     LOG_LEVEL = get_config(config, 'config', 'LOG_LEVEL', LOG_LEVEL, getInt=True)
     SHUTDOWN_CMD = get_config(config, 'config', 'SHUTDOWN_CMD', SHUTDOWN_CMD, split = True)
 
-    for i in range(len(SHUTDOWN_CMD)):
-        SHUTDOWN_CMD[i] = SHUTDOWN_CMD[i].replace('"','').replace("'", '')
     if ENVIA_HASS: ENVIA_JSON = True
 
 def shutdown_computer(s = 30):
@@ -291,15 +295,16 @@ def on_connect(client, userdata, flags, rc):
     if rc == 0:
         print ("Connected to " + MQTT_HOST)
         Connected = True
-        client.connected_flag=True
+        status['mqqt'] = "on"
+        client.connected_flag = True
         # Subscribing in on_connect() means that if we lose the connection and
         # reconnect then subscriptions will be renewed.
         client.subscribe(MQTT_TOPIC)
         # Mostra clientes
-        client.publish(MQTT_PUB + "/clients/" + get_ip() + '/UUID', UUID)
-        client.publish(MQTT_PUB + "/clients/" + get_ip() + '/connected', 'on') 
-        client.publish(MQTT_PUB + "/clients/" + get_ip() + '/time', datetime.now())
-        client.publish(MQTT_PUB + "/clients/" + get_ip() + '/version', VERSAO)
+        client.publish(MQTT_PUB + "/clients/" + status['ip'] + '/UUID', UUID)
+        client.publish(MQTT_PUB + "/clients/" + status['ip'] + '/connected', 'on') 
+        client.publish(MQTT_PUB + "/clients/" + status['ip'] + '/time', datetime.today().strftime('%Y-%m-%d %H:%M:%S'))
+        client.publish(MQTT_PUB + "/clients/" + status['ip'] + '/version', VERSAO)
     else:
         tp_c = {0: "Connection successful",
                 1: "Connection refused – incorrect protocol version",
@@ -310,14 +315,12 @@ def on_connect(client, userdata, flags, rc):
                 100: "Connection refused - other things"
         }
         Connected = False
+        status['mqqt'] = "off"
         if rc>5: rc=100
         print (rc + tp_c[rc])
         log.error(rc + tp_c[rc])
         # tratar quando for 3 e outros
-    if Connected:
-        status['mqqt'] = "on"
-    else:
-        status['mqqt'] = "off"
+
 
 def get_ip(change_dot = False):
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -343,9 +346,9 @@ def on_disconnect(client, userdata, rc):
     gDevices_enviados['b'] = False # Force sending again
     status['mqqt'] = "off"
     # mostra cliente desconectado
-    client.publish(MQTT_PUB + "/clients/" + get_ip() + '/UUID', UUID)
-    client.publish(MQTT_PUB + "/clients/" + get_ip() + '/connected', 'off')
-    client.publish(MQTT_PUB + "/clients/" + get_ip() + '/time', datetime.now()) 
+    client.publish(MQTT_PUB + "/clients/" + status['ip'] + '/UUID', UUID)
+    client.publish(MQTT_PUB + "/clients/" + status['ip'] + '/connected', 'off')
+    client.publish(MQTT_PUB + "/clients/" + status['ip'] + '/time', datetime.today().strftime('%Y-%m-%d %H:%M:%S')) 
 
 # The callback for when a PUBLISH message is received from the server.
 def on_message(client, userdata, msg):
@@ -633,9 +636,7 @@ def publicaDados(upsData):
         gMqttEnviado['b'] = True
         gMqttEnviado['t'] = datetime.now()
     if ENVIA_JSON or ENVIA_HASS or ENVIA_MUITOS:
-        if status['serial'] == 'open' and  \
-           status['ups'] == 'Connected' and \
-           status['mqqt'] == 'on': 
+        if status['serial'] == 'open' and status['ups'] == 'Connected' and status['mqqt'] == 'on': 
             status[APP_NAME] = "on"
         else:
             status[APP_NAME] = "off"
@@ -645,8 +646,10 @@ def publicaDados(upsData):
 def queryQ(raw = ""):
     ''' get ups data and publish'''
     global status
+    global statusLast
     global gMqttEnviado
     global gNoBreakLast
+
     if raw == "":
         x = send_command("query",cmd['Q'])
     else:
@@ -661,27 +664,32 @@ def queryQ(raw = ""):
     if SMSUPS_SERVER:
         checkBatteryLevel(upsData)  # check battery level
     if Connected and SMSUPS_SERVER:
-        blPublica = False
-        time_dif = date_diff_in_Seconds(datetime.now(), \
-            gMqttEnviado['t'])
-        if  gMqttEnviado['b'] == False or (time_dif > INTERVALO_MQTT):
+        time_dif = date_diff_in_Seconds(datetime.now(), gMqttEnviado['t'])
+        if  time_dif > INTERVALO_MQTT:
             gMqttEnviado['b'] = False
-            blPublica = True
         dataChanged = checkDataChange(upsData, gNoBreakLast)
         if len(dataChanged) != 0:
-            blPublica = True
+            gMqttEnviado['b'] = False
             gNoBreakLast = upsData.copy()
-        if blPublica:
+        if gMqttEnviado['b']:
+            dataChanged = checkDataChange(status, statusLast, status)
+            if len(dataChanged) != 0:
+                gMqttEnviado['b'] = False
+                statusLast = status.copy()
+        if not gMqttEnviado['b']:
             log.debug('Publica Dados')
             publicaDados(upsData)
     return upsData
 
-def checkDataChange(now, last, tags = SERIAL_CHECK_ALWAYS):
+def checkDataChange(now, last, tags = "SERIAL_CHECK_ALWAYS"):
     '''  Verifica se os parametros alteraram '''
+    if tags == "SERIAL_CHECK_ALWAYS": tags = SERIAL_CHECK_ALWAYS.copy()
     ret = list()
     for i in tags:
-        itemN = now[i]
-        itemL = last[i]
+        itemN = now[i] if i in now else "1"
+        itemL = last[i] if i in last else "2"
+        #if i in now: itemN = now[i] if True else "1"
+        #if i in last: itemL = last[i] if True else "0"
         if itemN != itemL: ret.append(i)
     return ret
 
@@ -722,7 +730,6 @@ def monta_publica_topico(component, sDict, varComuns):
         print(topico)
         print(dados)
         dados = json_remove_vazio(dados)
-        # log.debug ("topico: " + topico)
         client.publish(topico, dados)
 
 
@@ -810,16 +817,20 @@ log.setLevel(LOG_LEVEL)
 
 log.debug("********** SMS UPS v." + VERSAO)
 log.debug("Starting up...")
-log.debug("SMSUPS_SERVER: " + str(SMSUPS_SERVER))
-log.debug("SMSUPS_CLIENTE: " + str(SMSUPS_CLIENTE))
-log.debug("IP: " + get_ip())
-print ("SMSUPS_SERVER: " + str(SMSUPS_SERVER))
-print ("SMSUPS_CLIENTE: " + str(SMSUPS_CLIENTE))
-print ("IP: " + get_ip())
 
 
 get_secrets()
 log.setLevel(LOG_LEVEL)
+status['ip'] = get_ip()
+
+
+log.debug("SMSUPS_SERVER: " + str(SMSUPS_SERVER))
+log.debug("SMSUPS_CLIENTE: " + str(SMSUPS_CLIENTE))
+log.debug("IP: " + status['ip'])
+print ("SMSUPS_SERVER: " + str(SMSUPS_SERVER))
+print ("SMSUPS_CLIENTE: " + str(SMSUPS_CLIENTE))
+print ("IP: " + status['ip'])
+
 
 # info
 try:
