@@ -10,6 +10,7 @@ __pycache__/
 prot*.xml
 protocolos/
 secrets.ini
+smsUPS.log
 .vscode/launch.json
 
 # Distribution / packaging

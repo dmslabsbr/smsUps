@@ -11,6 +11,8 @@ import json
 import logging
 import uuid
 import socket
+import signal
+import sys
 from datetime import datetime
 from string import Template
 
@@ -47,7 +49,7 @@ UPS_BATERY_LEVEL = 60
 
 
 # CONST
-VERSAO = '0.15'
+VERSAO = '0.19'
 CR = '0D'
 MANUFACTURER = 'dmslabs'
 VIA_DEVICE = 'smsUPS'
@@ -111,7 +113,7 @@ gNoBreakLast = noBreak.copy()
 status = {"ip":"?",
           "serial": False,
           "ups": False,
-          "mqqt": False}
+          "mqtt": False}
 
 statusLast = status.copy()
           
@@ -259,6 +261,23 @@ def get_secrets():
 
     if ENVIA_HASS: ENVIA_JSON = True
 
+def sigterm_handler(_signo, _stack_frame):
+    ''' on_stop / onstop'''
+    global status
+    # Raises SystemExit(0):
+    print ("on_stop")
+    log.debug('on_stop')
+    status['serial'] = 'off'
+    status['ups'] = '?'
+    status['mqtt'] = 'off'
+    status['smsUPS'] = '?'
+    send_clients_status()
+    sys.exit(0)
+
+def receive_signal(signum, stack):
+    print ('Received: ', signum)
+    log.debug('sinal' + str(signum))
+
 def shutdown_computer(s = 30):
     ''' try to shutdown the computer '''
     log.warning('tring to shutdown the computer')
@@ -305,12 +324,13 @@ def on_connect(client, userdata, flags, rc):
     if rc == 0:
         print ("Connected to " + MQTT_HOST)
         Connected = True
-        status['mqqt'] = "on"
+        status['mqtt'] = "on"
         client.connected_flag = True
         # Subscribing in on_connect() means that if we lose the connection and
         # reconnect then subscriptions will be renewed.
         client.subscribe(MQTT_TOPIC)
         # Mostra clientes
+        status['time'] = datetime.today().strftime('%Y-%m-%d %H:%M:%S')
         send_clients_status()
     else:
         tp_c = {0: "Connection successful",
@@ -322,7 +342,7 @@ def on_connect(client, userdata, flags, rc):
                 100: "Connection refused - other things"
         }
         Connected = False
-        status['mqqt'] = "off"
+        status['mqtt'] = "off"
         if rc>5: rc=100
         print (rc + tp_c[rc])
         log.error(rc + tp_c[rc])
@@ -333,13 +353,13 @@ def send_clients_status():
     ''' send connected clients data '''
     global status
     dadosEnviar = status.copy()
-    mqqt_topic = MQTT_PUB + "/clients/" + status['ip']
+    mqtt_topic = MQTT_PUB + "/clients/" + status['ip']
     dadosEnviar.pop('ip')
     dadosEnviar['UUID'] = UUID
-    dadosEnviar['time'] = datetime.today().strftime('%Y-%m-%d %H:%M:%S')
+    # dadosEnviar['time'] = datetime.today().strftime('%Y-%m-%d %H:%M:%S')
     dadosEnviar['version'] = VERSAO
     jsonStatus = json.dumps(dadosEnviar)
-    client.publish(mqqt_topic, jsonStatus)
+    client.publish(mqtt_topic, jsonStatus)
 
 
 def get_ip(change_dot = False):
@@ -365,7 +385,7 @@ def on_disconnect(client, userdata, rc):
     client.connected_flag=False
     client.disconnect_flag=True
     gDevices_enviados['b'] = False # Force sending again
-    status['mqqt'] = "off"
+    status['mqtt'] = "off"
     # mostra cliente desconectado
     try:
         send_clients_status()
@@ -443,9 +463,8 @@ def send_command(cmd_name, cmd_string, sendQ = False):
     respHex = ""
     comando = cmd_string
     if cmd_name != "query":
-        log.debug("cmd_name: " + cmd_name + " cmd_str: " + comando)
-    if serialOk:
         log.debug ("cmd:" + cmd_name + " / str: " + comando + " / Q: " + str(sendQ))
+    if serialOk:
         if sendQ: comando = comando + cmd['Q']  # adiciona o Q.
         cmd_bytes = bytearray.fromhex(comando)
         try:
@@ -464,7 +483,8 @@ def send_command(cmd_name, cmd_string, sendQ = False):
             mostraErro(e,30,"send_command")
             serialOk = ser.is_open()
             respHex = ""
-        log.debug ("response: " + str(respHex))
+        if cmd_name != "query":  # evita muitas gravações no log
+            log.debug ("response: " + str(respHex))
     else:
         log.warning('send-cmd - serial not ok')
     return respHex
@@ -651,7 +671,7 @@ def publicaDados(upsData):
         gMqttEnviado['b'] = True
         gMqttEnviado['t'] = datetime.now()
     if ENVIA_JSON or ENVIA_HASS or ENVIA_MUITOS:
-        if status['serial'] == 'open' and status['ups'] == 'Connected' and status['mqqt'] == 'on': 
+        if status['serial'] == 'open' and status['ups'] == 'Connected' and status['mqtt'] == 'on': 
             status[APP_NAME] = "on"
         else:
             status[APP_NAME] = "off"
@@ -709,7 +729,7 @@ def checkDataChange(now, last, tags = "SERIAL_CHECK_ALWAYS"):
 
 def checkBatteryLevel(upsData):
     ''' check if battery still enough '''
-    bat = upsData['batterylevel']
+    bat = int(upsData['batterylevel'])
     if bat < UPS_BATERY_LEVEL and bat!=0:
         # bateria acabando.
         client.publish(MQTT_PUB + "/cmd", MQTT_CMD_SHUTDOWN )
@@ -819,19 +839,33 @@ def abre_serial():
 # APP START
 
 print("********** SMS UPS v." + VERSAO)
-print ("Starting up...")
+print ("Starting up... " + datetime.today().strftime('%Y-%m-%d %H:%M:%S'))
 
 #LOG
 log = logging.getLogger('smsUPS')
-hdlr = logging.FileHandler(LOG_FILE)
-formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s')
-hdlr.setFormatter(formatter)
-log.addHandler(hdlr) 
-log.setLevel(LOG_LEVEL)
+erroDif = False
+try:
+    hdlr = logging.FileHandler(LOG_FILE)
+except PermissionError:  # caso não consiga abrir
+    hdlr = logging.FileHandler('./smsUPS.log')
+except Exception as e:
+    erroDif = e
+finally:
+    formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s')
+    hdlr.setFormatter(formatter)
+    log.addHandler(hdlr) 
+    log.setLevel(LOG_LEVEL)
 
 log.debug("********** SMS UPS v." + VERSAO)
 log.debug("Starting up...")
 
+if erroDif != False:
+    # different error
+    mostraErro(e, 20, 'Open LOG_FILE')
+
+if hdlr.baseFilename != LOG_FILE:
+    print ('LOG file: ', hdlr.baseFilename)
+    log.debug ('LOG file: ' + hdlr.baseFilename)
 
 get_secrets()
 log.setLevel(LOG_LEVEL)
@@ -869,6 +903,10 @@ client.connect(MQTT_HOST, 1883, 60)
 client.loop_start()  # start the loop
 log.info("MQTT OK")
 
+# signals monitor
+signal.signal(signal.SIGTERM, sigterm_handler)
+signal.signal(signal.SIGUSR1, receive_signal)
+signal.signal(signal.SIGUSR2, receive_signal)
 
 while not Connected:
     time.sleep(1)  # wait for connection

@@ -53,7 +53,7 @@ sudo cp smsUPS_laucher.plist  /Library/LaunchDaemons
 sudo launchctl load /Library/LaunchDaemons/smsUPS_laucher.plist
 sudo launchctl start dmslabs.python.smsUPS
 sudo launchctl stop dmslabs.python.smsUPS
-sudo launchctl unload dmslabs.python.smsUPS
+sudo launchctl unload /Library/LaunchDaemons/smsUPS_laucher.plist
 sudo launchctl remove dmslabs.python.smsUPS
 sudo launchctl list | grep smsUPS
 sudo rm /var/tmp/smsUPS.*
