@@ -193,7 +193,7 @@ def mostraErro(e, nivel=10, msg_add=""):
     if nivel == logging.WARNING: log.warning(err_msg)    # 30
     if nivel == logging.ERROR: log.error(err_msg)      # 40
     if nivel == logging.CRITICAL: log.critical(err_msg)   # 50
-    log.warning (err_msg) 
+    # log.warning (err_msg) 
 
 def get_secrets():
     ''' GET configuration data '''
@@ -286,12 +286,22 @@ def shutdown_computer(s = 30):
             #log.debug(': ' + str(ret))
             #print(": " + str(ret))
 
+def onOff(value, ON = "on", OFF = "off"):
+    ''' return a string on / off '''
+    v = str(value).upper().replace('-','')
+    ret = OFF
+    if v == '1': ret = ON
+    if v == 'TRUE': ret = ON
+    if v == 'ON': ret = ON
+    return ret
+
+
 # The callback for when the client receives a CONNACK response from the server.
 def on_connect(client, userdata, flags, rc):
     global Connected
     global status
-    print("Connected with result code "+str(rc))
-    log.debug("Connected with result code "+str(rc))
+    print("MQTT connected with result code "+str(rc))
+    log.debug("MQTT connected with result code "+str(rc))
     if rc == 0:
         print ("Connected to " + MQTT_HOST)
         Connected = True
@@ -301,10 +311,7 @@ def on_connect(client, userdata, flags, rc):
         # reconnect then subscriptions will be renewed.
         client.subscribe(MQTT_TOPIC)
         # Mostra clientes
-        client.publish(MQTT_PUB + "/clients/" + status['ip'] + '/UUID', UUID)
-        client.publish(MQTT_PUB + "/clients/" + status['ip'] + '/connected', 'on') 
-        client.publish(MQTT_PUB + "/clients/" + status['ip'] + '/time', datetime.today().strftime('%Y-%m-%d %H:%M:%S'))
-        client.publish(MQTT_PUB + "/clients/" + status['ip'] + '/version', VERSAO)
+        send_clients_status()
     else:
         tp_c = {0: "Connection successful",
                 1: "Connection refused – incorrect protocol version",
@@ -320,6 +327,19 @@ def on_connect(client, userdata, flags, rc):
         print (rc + tp_c[rc])
         log.error(rc + tp_c[rc])
         # tratar quando for 3 e outros
+
+
+def send_clients_status():
+    ''' send connected clients data '''
+    global status
+    dadosEnviar = status.copy()
+    mqqt_topic = MQTT_PUB + "/clients/" + status['ip']
+    dadosEnviar.pop('ip')
+    dadosEnviar['UUID'] = UUID
+    dadosEnviar['time'] = datetime.today().strftime('%Y-%m-%d %H:%M:%S')
+    dadosEnviar['version'] = VERSAO
+    jsonStatus = json.dumps(dadosEnviar)
+    client.publish(mqqt_topic, jsonStatus)
 
 
 def get_ip(change_dot = False):
@@ -338,6 +358,7 @@ def get_ip(change_dot = False):
 def on_disconnect(client, userdata, rc):
     global Connected
     global gDevices_enviados
+    global status
     Connected = False
     log.info("disconnecting reason  "  +str(rc))
     print("disconnecting reason  "  +str(rc))
@@ -346,9 +367,10 @@ def on_disconnect(client, userdata, rc):
     gDevices_enviados['b'] = False # Force sending again
     status['mqqt'] = "off"
     # mostra cliente desconectado
-    client.publish(MQTT_PUB + "/clients/" + status['ip'] + '/UUID', UUID)
-    client.publish(MQTT_PUB + "/clients/" + status['ip'] + '/connected', 'off')
-    client.publish(MQTT_PUB + "/clients/" + status['ip'] + '/time', datetime.today().strftime('%Y-%m-%d %H:%M:%S')) 
+    try:
+        send_clients_status()
+    except Exception as e:
+        mostraErro(e,30,"on_disconnect")
 
 # The callback for when a PUBLISH message is received from the server.
 def on_message(client, userdata, msg):
@@ -361,12 +383,7 @@ def on_message(client, userdata, msg):
             msg_p = msg_p.replace("'",'"')
             res = json.loads(msg_p)
         else:
-            err_msg = 'Error! Code: {c}, Message, {m}'.format(c = type(e).__name__, m = str(e))
-            print(err_msg)
-            log.warning (err_msg)
-    if ECHO: 
-        print(msg.topic+" "+str(msg.payload))
-        print(res)
+            mostraErro(e, 40, "on_message")
     log.debug("on_message: " + msg.topic + " " + str(msg.payload))
     v=res['cmd'].upper()
     if v=='T':
@@ -424,14 +441,13 @@ def send_command(cmd_name, cmd_string, sendQ = False):
     global serialOk
     global status
     respHex = ""
-    log.debug("cmd_name: " + cmd_name + " cmd_str: " + cmd_string)
+    comando = cmd_string
+    if cmd_name != "query":
+        log.debug("cmd_name: " + cmd_name + " cmd_str: " + comando)
     if serialOk:
-        if ECHO: print ("\ncmd_name:", cmd_name)
-        if ECHO: print ("cmd_string:", cmd_string)
-        if ECHO: print ("sendQ:", str(sendQ))
-        log.debug ("cmd:" + cmd_name + " / str: " + cmd_string + " / Q: " + str(sendQ))
-        if sendQ: cmd_string = cmd_string + cmd['Q']  # adiciona o Q.
-        cmd_bytes = bytearray.fromhex(cmd_string)
+        log.debug ("cmd:" + cmd_name + " / str: " + comando + " / Q: " + str(sendQ))
+        if sendQ: comando = comando + cmd['Q']  # adiciona o Q.
+        cmd_bytes = bytearray.fromhex(comando)
         try:
             for cmd_byte in cmd_bytes:
                 hex_byte = ("{0:02x}".format(cmd_byte))
@@ -448,7 +464,6 @@ def send_command(cmd_name, cmd_string, sendQ = False):
             mostraErro(e,30,"send_command")
             serialOk = ser.is_open()
             respHex = ""
-        if ECHO: print ("response:", respHex)
         log.debug ("response: " + str(respHex))
     else:
         log.warning('send-cmd - serial not ok')
@@ -526,14 +541,14 @@ def dadosNoBreak(lista):
     noBreak['temperatureC'] = toINT16(lista[7])/10
     bi = "{0:08b}".format(toINT16(lista[8]))
     # bj = "{0:08b}".format(toINT16(lista[9]))
-    noBreak['BeepLigado'] = bi[7]     # Beep Ligado
-    noBreak['ShutdownAtivo'] = bi[6]  # ShutdownAtivo
-    noBreak['TesteAtivo'] = bi[5]     # teste ativo
-    noBreak['UpsOk'] = bi[4]          # upsOK / Vcc na saída
-    noBreak['Boost'] = bi[3]          # Boost / Potência de Saída Elevada
-    noBreak['ByPass'] = bi[2]         # byPass
-    noBreak['BateriaBaixa'] = bi[1]   # Bateria Baixa / Falha de Bateria
-    noBreak['BateriaEmUso'] = bi[0]  # Bateria Ligada / em uso
+    noBreak['BeepLigado'] = onOff(bi[7])     # Beep Ligado
+    noBreak['ShutdownAtivo'] = onOff(bi[6])  # ShutdownAtivo
+    noBreak['TesteAtivo'] = onOff(bi[5])     # teste ativo
+    noBreak['UpsOk'] = onOff(bi[4])          # upsOK / Vcc na saída
+    noBreak['Boost'] = onOff(bi[3])          # Boost / Potência de Saída Elevada
+    noBreak['ByPass'] = onOff(bi[2])         # byPass
+    noBreak['BateriaBaixa'] = onOff(bi[1])   # Bateria Baixa / Falha de Bateria
+    noBreak['BateriaEmUso'] = onOff(bi[0])  # Bateria Ligada / em uso
     noBreak['RedeEletrica'] = "ver"  # Rede Elétrica / Vcc na entrada
 
     return noBreak
@@ -640,8 +655,7 @@ def publicaDados(upsData):
             status[APP_NAME] = "on"
         else:
             status[APP_NAME] = "off"
-        jsonStatus = json.dumps(status)
-        client.publish(MQTT_PUB + "/status", jsonStatus)
+        send_clients_status()
 
 def queryQ(raw = ""):
     ''' get ups data and publish'''
@@ -657,7 +671,7 @@ def queryQ(raw = ""):
     lista_dados = trataRetorno(x)
     upsData = dadosNoBreak(lista_dados)
     if gNoBreakLast['time'] == '': gNoBreakLast = upsData.copy()
-    if ECHO:
+    if False: # ECHO
         print ('---------')
         print (x)
         mostra_dados(upsData)
@@ -696,7 +710,7 @@ def checkDataChange(now, last, tags = "SERIAL_CHECK_ALWAYS"):
 def checkBatteryLevel(upsData):
     ''' check if battery still enough '''
     bat = upsData['batterylevel']
-    if bat < UPS_BATERY_LEVEL:
+    if bat < UPS_BATERY_LEVEL and bat!=0:
         # bateria acabando.
         client.publish(MQTT_PUB + "/cmd", MQTT_CMD_SHUTDOWN )
 
@@ -716,7 +730,7 @@ def monta_publica_topico(component, sDict, varComuns):
     newDict = sDict.copy()
     newDict.pop('todos')
     for key,dic in newDict.items():
-        print(key,dic)
+        # print(key,dic)
         varComuns['uniq_id']=varComuns['identifiers'] + "_" + key
         if not('val_tpl' in dic):
             dic['val_tpl']=dic['name']
@@ -727,8 +741,8 @@ def monta_publica_topico(component, sDict, varComuns):
         dados = Template(dados.safe_substitute(varComuns)) # faz ultimas substituições
         dados = dados.safe_substitute(key_todos) # remove os não substituidos.
         topico = MQTT_HASS + "/" + component + "/" + NODE_ID + "/" + varComuns['uniq_id'] + "/config"
-        print(topico)
-        print(dados)
+        # print(topico)
+        # print(dados)
         dados = json_remove_vazio(dados)
         client.publish(topico, dados)
 
@@ -755,7 +769,7 @@ def send_hass():
             sensor_dic[k[0]] = json.loads(json_str)
 
     for k in sensor_dic.items():
-        print('Componente:' + k[0])
+        # print('Componente:' + k[0])
         monta_publica_topico(k[0], sensor_dic[k[0]], varComuns)
 
     gDevices_enviados['b'] = True

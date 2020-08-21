@@ -1,25 +1,24 @@
 {
     "BeepLigado":{
        "name":"BeepLigado",
-       "device_class":"sound",
-       "pl_on": "1",
-       "pl_off": "0",
+       "pl_on": "on",
+       "pl_off": "off",
        "pl_avail": "",
        "pl_not_avail": ""
     },
     "ShutdownAtivo":{
        "name":"ShutdownAtivo",
        "device_class":"moving",
-       "pl_on": "1",
-       "pl_off": "0",
+       "pl_on": "on",
+       "pl_off": "off",
        "pl_avail": "1",
        "pl_not_avail": "0"
     },
     "TesteAtivo":{
        "name":"TesteAtivo",
        "device_class":"motion",
-       "pl_on": "1",
-       "pl_off": "0",
+       "pl_on": "on",
+       "pl_off": "off",
        "pl_avail": "1",
        "pl_not_avail": "0"
     },
