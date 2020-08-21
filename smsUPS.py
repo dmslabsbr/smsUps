@@ -278,7 +278,7 @@ def receive_signal(signum, stack):
     print ('Received: ', signum)
     log.debug('sinal' + str(signum))
 
-def shutdown_computer(s = 30):
+def shutdown_computer(s = 60):
     ''' try to shutdown the computer '''
     log.warning('tring to shutdown the computer')
     import sys

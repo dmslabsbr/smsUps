@@ -10,8 +10,8 @@
        "pl_off": {
          "cmd": "M"
      },
-       "pl_avail": "1",
-       "pl_not_avail": "0",
+       "pl_avail": "on",
+       "pl_not_avail": "off",
        "state_off": 0,
        "state_on": 1 
     },
@@ -24,8 +24,8 @@
           "cmd": "T"
       },
       "pl_off": {"cmd": "C"},
-      "pl_avail": "1",
-      "pl_not_avail": "0",
+      "pl_avail": "on",
+      "pl_not_avail": "off",
       "state_off": 0,
       "state_on": 1
    },
@@ -39,8 +39,8 @@
           "val": "60"
       },
       "pl_off": {"cmd": "C"},
-      "pl_avail": "1",
-      "pl_not_avail": "0",
+      "pl_avail": "on",
+      "pl_not_avail": "off",
       "state_off": 0,
       "state_on": 1 
    },
@@ -54,8 +54,8 @@
           "val": "300"
       },
       "pl_off": {"cmd": "C"},
-      "pl_avail": "1",
-      "pl_not_avail": "0",
+      "pl_avail": "on",
+      "pl_not_avail": "off",
       "state_off": 0,
       "state_on": 1 
    },
@@ -66,10 +66,10 @@
       "val_tpl":"{{ value_json.ShutdownAtivo }}",
       "pl_on": {"cmd": "C"},
       "pl_off": {"cmd": "C"},
-      "pl_avail": "0",
-      "pl_not_avail": "1",
-      "state_off": "1",
-      "state_on": "0" 
+      "pl_avail": "off",
+      "pl_not_avail": "on",
+      "state_off": "on",
+      "state_on": "off" 
    },
    "cancel_test":{
       "name":"Cancel Test",
@@ -78,10 +78,10 @@
       "val_tpl":"{{ value_json.TesteAtivo }}",
       "pl_on": {"cmd": "D"},
       "pl_off": {"cmd": "D"},
-      "pl_avail": "0",
-      "pl_not_avail": "1",
-      "state_off": "1",
-      "state_on": "0" 
+      "pl_avail": "off",
+      "pl_not_avail": "on",
+      "state_off": "on",
+      "state_on": "off" 
    },
    "test_low":{
       "name":"Test low battery",
@@ -90,8 +90,8 @@
       "val_tpl":"{{ value_json.TesteAtivo }}",
       "pl_on": {"cmd": "L"},
       "pl_off": {"cmd": "C"},
-      "pl_avail": "1",
-      "pl_not_avail": "0"
+      "pl_avail": "on",
+      "pl_not_avail": "off"
    },
     "todos":{
        "name":"",

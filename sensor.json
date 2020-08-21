@@ -2,12 +2,14 @@
    "inputVac":{
       "name":"inputVac",
       "device_class":"power",
-      "icon":"mdi:power-plug"
+      "icon":"mdi:power-plug",
+      "unit_of_measurement":"V"
    },
    "outputVac":{
       "name":"outputVac",
       "icon":"mdi:power-socket-fr",
-      "device_class":"power"
+      "device_class":"power",
+      "unit_of_measurement":"V"
    },
    "outputHz":{
       "name":"outputHz",

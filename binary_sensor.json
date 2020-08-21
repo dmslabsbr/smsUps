@@ -11,56 +11,56 @@
        "device_class":"moving",
        "pl_on": "on",
        "pl_off": "off",
-       "pl_avail": "1",
-       "pl_not_avail": "0"
+       "pl_avail": "on",
+       "pl_not_avail": "off"
     },
     "TesteAtivo":{
        "name":"TesteAtivo",
        "device_class":"motion",
        "pl_on": "on",
        "pl_off": "off",
-       "pl_avail": "1",
-       "pl_not_avail": "0"
+       "pl_avail": "on",
+       "pl_not_avail": "off"
     },
     "UpsOk":{
        "name":"UpsOk",
        "device_class":"safety",
-       "pl_on": "0",
-       "pl_off": "1",
-       "pl_avail": "1",
-       "pl_not_avail": "0"
+       "pl_on": "off",
+       "pl_off": "on",
+       "pl_avail": "on",
+       "pl_not_avail": "off"
     },
     "Boost":{
        "name":"Boost",
        "device_class":"power",
-       "pl_on": "1",
-       "pl_off": "0",
-       "pl_avail": "1",
-       "pl_not_avail": "0"
+       "pl_on": "on",
+       "pl_off": "off",
+       "pl_avail": "on",
+       "pl_not_avail": "off"
     },
     "ByPass":{
        "name":"ByPass",
        "device_class":"power",
-       "pl_on": "1",
-       "pl_off": "0",
-       "pl_avail": "1",
-       "pl_not_avail": "0"
+       "pl_on": "on",
+       "pl_off": "off",
+       "pl_avail": "on",
+       "pl_not_avail": "off"
     },
     "BateriaBaixa":{
        "name":"BateriaBaixa",
        "device_class":"battery",
-       "pl_on": "1",
-       "pl_off": "0",
-       "pl_avail": "1",
-       "pl_not_avail": "0"
+       "pl_on": "on",
+       "pl_off": "off",
+       "pl_avail": "on",
+       "pl_not_avail": "off"
     },
     "BateriaEmUso":{
        "name":"BateriaEmUso",
        "device_class":"battery_charging",
-       "pl_on": "1",
-       "pl_off": "0",
-       "pl_avail": "1",
-       "pl_not_avail": "0"
+       "pl_on": "on",
+       "pl_off": "off",
+       "pl_avail": "on",
+       "pl_not_avail": "off"
     },
     "todos":{
        "name":"",
