@@ -1,5 +1,5 @@
 {
-    "BeepLigado":{
+    "#BeepLigado":{
        "name":"BeepLigado",
        "pl_on": "on",
        "pl_off": "off",
@@ -8,7 +8,6 @@
     },
     "ShutdownAtivo":{
        "name":"ShutdownAtivo",
-       "device_class":"moving",
        "pl_on": "on",
        "pl_off": "off",
        "pl_avail": "on",
@@ -16,7 +15,6 @@
     },
     "TesteAtivo":{
        "name":"TesteAtivo",
-       "device_class":"motion",
        "pl_on": "on",
        "pl_off": "off",
        "pl_avail": "on",

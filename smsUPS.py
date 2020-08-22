@@ -29,7 +29,6 @@ INTERVALO_MQTT = 120   #   How often to send data to the MQTT server?
 INTERVALO_HASS = 600   # How often to send device information in a format compatible with Home Asssistant MQTT discovery?
 INTERVALO_SERIAL = 3 # How often do I read UPS information on the serial port?
 SERIAL_CHECK_ALWAYS = 'temperatureC, batterylevel, UpsOk, BateriaBaixa, BateriaEmUso'
-INTERVALO_DISCOVERY = 600
 MQTT_TOPIC  = "$SYS/#"
 MQTT_PUB = "home/ups"
 MQTT_HASS = "homeassistant"
@@ -49,7 +48,7 @@ UPS_BATERY_LEVEL = 60
 
 
 # CONST
-VERSAO = '0.19'
+VERSAO = '0.20'
 CR = '0D'
 MANUFACTURER = 'dmslabs'
 VIA_DEVICE = 'smsUPS'
@@ -57,6 +56,7 @@ NODE_ID = 'dmslabs'
 APP_NAME = 'smsUPS'
 MQTT_CMD_SHUTDOWN = '{"cmd": "SHUTDOWN","val": ""}'
 UUID = str(uuid.uuid1())
+INTERVALO_EXPIRE = int(INTERVALO_MQTT * INTERVALO_SERIAL)
 
 respostaH = [None] * 18
 
@@ -126,6 +126,7 @@ json_hass = {"sensor": '''
   "val_tpl": "{{ value_json.$val_tpl }}",
   "icon": "$icon",
   "device_class": "$device_class",
+"expire_after": "$expire_after",
   "device": { $device_dict }
 }''',
     "binary_sensor": '''
@@ -136,6 +137,7 @@ json_hass = {"sensor": '''
   "val_tpl": "{{ value_json.$val_tpl }}",
   "device_class": "$device_class",
   "device": { $device_dict },
+  "expire_after": "$expire_after",
   "pl_on": "$pl_on",
   "pl_off": "$pl_off",
   "pl_avail": "$pl_avail",
@@ -417,8 +419,8 @@ def on_message(client, userdata, msg):
             ret = send_command("Test n", comando, sendQ=True)  # teste N minutes
             client.publish(MQTT_PUB + "/result", str(ret))
     elif v=="M":
-        ret = send_command("Beep",cmd['M'])
-        client.publish(MQTT_PUB + "/result", str(ret), sendQ=True)
+        ret = send_command("Beep",cmd['M'], sendQ=True)
+        client.publish(MQTT_PUB + "/result", str(ret))
     elif v=="C":
         ret = send_command("CancelShutdown",cmd['C'], sendQ=True)  # cancela shutdown ou reestore
         client.publish(MQTT_PUB + "/result", str(ret))
@@ -465,7 +467,7 @@ def send_command(cmd_name, cmd_string, sendQ = False):
     if cmd_name != "query":
         log.debug ("cmd:" + cmd_name + " / str: " + comando + " / Q: " + str(sendQ))
     if serialOk:
-        if sendQ: comando = comando + cmd['Q']  # adiciona o Q.
+        if sendQ: comando = comando + ' ' + cmd['Q']  # adiciona o Q.
         cmd_bytes = bytearray.fromhex(comando)
         try:
             for cmd_byte in cmd_bytes:
@@ -662,6 +664,7 @@ def publicaDados(upsData):
     global status
     global gMqttEnviado
     if ENVIA_JSON:
+        upsData.update(noBreakInfo)  # junta outros dados
         jsonUPS = json.dumps(upsData)
         client.publish(MQTT_PUB + "/json", jsonUPS)
         gMqttEnviado['b'] = True
@@ -732,7 +735,8 @@ def checkBatteryLevel(upsData):
     bat = int(upsData['batterylevel'])
     if bat < UPS_BATERY_LEVEL and bat!=0:
         # bateria acabando.
-        client.publish(MQTT_PUB + "/cmd", MQTT_CMD_SHUTDOWN )
+        if upsData['BateriaBaixa']=="on" or upsData['BateriaEmUso']=='on': # evita shutdown no pico de volta
+            client.publish(MQTT_PUB + "/cmd", MQTT_CMD_SHUTDOWN )
 
 def json_remove_vazio(strJson):
     ''' remove linhas / elementos vazios de uma string Json '''
@@ -751,20 +755,22 @@ def monta_publica_topico(component, sDict, varComuns):
     newDict.pop('todos')
     for key,dic in newDict.items():
         # print(key,dic)
-        varComuns['uniq_id']=varComuns['identifiers'] + "_" + key
-        if not('val_tpl' in dic):
-            dic['val_tpl']=dic['name']
-        dic['name']=varComuns['uniq_id']
-        dic['device_dict'] = device_dict
-        dados = Template(json_hass[component]) # sensor
-        dados = Template(dados.safe_substitute(dic))
-        dados = Template(dados.safe_substitute(varComuns)) # faz ultimas substituições
-        dados = dados.safe_substitute(key_todos) # remove os não substituidos.
-        topico = MQTT_HASS + "/" + component + "/" + NODE_ID + "/" + varComuns['uniq_id'] + "/config"
-        # print(topico)
-        # print(dados)
-        dados = json_remove_vazio(dados)
-        client.publish(topico, dados)
+        if key[:1] != '#':
+            varComuns['uniq_id']=varComuns['identifiers'] + "_" + key
+            if not('val_tpl' in dic):
+                dic['val_tpl']=dic['name']
+            dic['name']=varComuns['uniq_id']
+            dic['device_dict'] = device_dict
+            dic['expire_after'] = INTERVALO_EXPIRE # quando deve expirar
+            dados = Template(json_hass[component]) # sensor
+            dados = Template(dados.safe_substitute(dic))
+            dados = Template(dados.safe_substitute(varComuns)) # faz ultimas substituições
+            dados = dados.safe_substitute(key_todos) # remove os não substituidos.
+            topico = MQTT_HASS + "/" + component + "/" + NODE_ID + "/" + varComuns['uniq_id'] + "/config"
+            # print(topico)
+            # print(dados)
+            dados = json_remove_vazio(dados)
+            client.publish(topico, dados)
 
 
 def send_hass():

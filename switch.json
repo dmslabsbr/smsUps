@@ -5,15 +5,15 @@
        "icon":"mdi:music-note",
        "val_tpl":"{{ value_json.BeepLigado }}",
        "pl_on": {
-           "cmd": "M"
-       },
-       "pl_off": {
          "cmd": "M"
-     },
+       },
+         "pl_off": {
+         "cmd": "M"
+       },
        "pl_avail": "on",
        "pl_not_avail": "off",
-       "state_off": 0,
-       "state_on": 1 
+       "state_off": "off",
+       "state_on": "on" 
     },
     "test_10s":{
       "name":"test_10s",
@@ -23,11 +23,11 @@
       "pl_on": {
           "cmd": "T"
       },
-      "pl_off": {"cmd": "C"},
+      "pl_off": {"cmd": "D"},
       "pl_avail": "on",
       "pl_not_avail": "off",
-      "state_off": 0,
-      "state_on": 1
+      "state_off": "off",
+      "state_on": "on"
    },
     "test_01m":{
       "name":"test_01m",
@@ -38,11 +38,11 @@
           "cmd": "TN",
           "val": "60"
       },
-      "pl_off": {"cmd": "C"},
+      "pl_off": {"cmd": "D"},
       "pl_avail": "on",
       "pl_not_avail": "off",
-      "state_off": 0,
-      "state_on": 1 
+      "state_off": "off",
+      "state_on": "on" 
    },
    "test_05m":{
       "name":"test_05m",
@@ -53,11 +53,11 @@
           "cmd": "TN",
           "val": "300"
       },
-      "pl_off": {"cmd": "C"},
+      "pl_off": {"cmd": "D"},
       "pl_avail": "on",
       "pl_not_avail": "off",
-      "state_off": 0,
-      "state_on": 1 
+      "state_off": "off",
+      "state_on": "on" 
    },
    "cancel_Shutdown":{
       "name":"Cancel Shutdown",

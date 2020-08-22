@@ -153,3 +153,8 @@ sudo systemctl status smsUPS.service
 
 Outros comandos para desligar o iMac (osx)
 osascript -e 'tell app "System Events" to shut down'
+
+
+
+switch.json
+   Quando '#' na primeira letra do nome, não carrega.
