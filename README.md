@@ -6,26 +6,46 @@ Before run you need to install:
    https://github.com/eclipse/paho.mqtt.python 
 
 
+```bash
 git clone https://github.com/dmslabsbr/smsUps.git
 cd smsUps
 python3 -m venv ./smsUps/
 source ./bin/activate
 pip3 install paho-mqtt
 pip3 install pyserial
+```
 
+You also need to discover which port your No-break (UPS) is connected.
 
+```bash
 ls /dev/tty*
+```
 
-Achei /dev/ttyUSB0
+I found **/dev/ttyUSB0**
 
+You also need you **MQTT Server** address, username and password.
 
+After this you could use your favorite text editor to edit **secrets.ini** file.
+
+I like to use **nano**.
+
+```bash
 nano secrets.ini
+```
 
+## 1 - First running and test
+
+To run smsUPS app, you could use this command:
+```bash
 python3 smsUPS.py
+```
+If all goes well, you can go to the next step and install the app as a service.
 
+## 2 - Install as a service
 
-install as service - Raspiberry
+### a) Raspiberry OS or other Linux OS
 
+```bash
 sudo cp smsUPS.service /etc/systemd/system
 sudo chmod 644 /etc/systemd/system/smsUPS.service
 sudo chmod +x /home/pi/smsUps/smsUPS.py
@@ -34,11 +54,13 @@ sudo systemctl enable smsUPS.service
 sudo systemctl start smsUPS.service
 sudo systemctl status smsUPS.service
 sudo systemctl stop smsUPS.service
+```
 
-
-Install as service - OSX
+### b) OSX - iMac
 
 * run as current user
+  
+```bash
 cp smsUPS_laucher.plist ~/Library/LaunchAgents/
 launchctl load ~/Library/LaunchAgents/smsUPS_laucher.plist
 launchctl start dmslabs.python.smsUPS
@@ -47,8 +69,10 @@ launchctl unload dmslabs.python.smsUPS
 launchctl remove dmslabs.python.smsUPS
 launchctl list | grep smsUPS
 rm /var/tmp/smsUPS.*
+```
 
 * run as root
+```bash
 sudo cp smsUPS_laucher.plist  /Library/LaunchDaemons
 sudo launchctl load /Library/LaunchDaemons/smsUPS_laucher.plist
 sudo launchctl start dmslabs.python.smsUPS
@@ -57,57 +81,92 @@ sudo launchctl unload /Library/LaunchDaemons/smsUPS_laucher.plist
 sudo launchctl remove dmslabs.python.smsUPS
 sudo launchctl list | grep smsUPS
 sudo rm /var/tmp/smsUPS.*
+```
 
-Commands
+## Commands
 
-Send json to /home/ups/cmd
+* Send json string by **MQTT** to **/home/ups/cmd**
+
+```json
 {
    "cmd": "",
    "val": ""
 }
+```
 
-{cmd: "T", val: ""}  - testa bateria por 10 segundos - sem retorno  - "T"
+* `{cmd: "T", val: ""}`  - testa bateria por 10 segundos - sem retorno  - "T"
+```json 
+   {
+      "cmd": "TN",
+      "val": ""
+   }
+```
 
-{cmd: "TN", val: ""}  - testa bateria por n segundos - sem retorno  - "T"
-   ex: {
-         "cmd": "TN",
-         "val": 120
-       }
+* `{cmd: "TN", val: ""}`  - testa bateria por n segundos - sem retorno  - "T"
 
-{cmd: "M", val: ""}  - # Liga/desliga beep   - sem retorno  "M"
-   ex: {
-         "cmd": "M"
-       }
-{cmd: "C", val: ""} - Cancela Shutdown ou Reestore
-   ex: {
-         "cmd": "C"
-       }
-{cmd: "D", val: ""} - Cancela Testes
-   ex: {
-         "cmd": "D"
-       }
-{cmd: "RAW", val: ""} - Envia para o nobreak os dados em val
-   ex: {
-         "cmd": "RAW",
-         "val": "49ffffffffbb0d"
-       }
-{cmd: "CMD", val: ""} - Envia para o nobreak os dados em val e completa com o checksum
-   ex: {
-         "cmd": "CMD",
-         "val": "49ffffffff"
-       }
-{cmd: "SHUTDOWN", val: ""} - Envia sinal para desligar maquinas rodando os clientes.
-   ex: {
-         "cmd": "SHUTDOWN",
-         "val": ""
-       }
+```json 
+   {
+      "cmd": "TN",
+      "val": 120
+   }
+```
 
+* `{cmd: "M", val: ""}`  -  Liga/desliga beep   - sem retorno  "M"
 
+```json
+   {
+      "cmd": "M"
+   }
+```
 
-secrets.ini file
+* `{cmd: "C", val: ""}` - Cancela Shutdown ou Reestore
+  
+```json
+   {
+   "cmd": "C"
+   }
+```
 
-You should create your own secrets.ini file. Like this:
+* `{cmd: "D", val: ""}` - Cancela Testes
 
+```json
+   {
+      "cmd": "D"
+   }
+```
+
+* `{cmd: "RAW", val: ""}` - Envia para o nobreak os dados em val
+  
+```json
+   {
+      "cmd": "RAW",
+      "val": "49ffffffffbb0d"
+   }
+```
+
+* `{cmd: "CMD", val: ""}` - Envia para o nobreak os dados em val e completa com o checksum
+  
+```json
+   {
+      "cmd": "CMD",
+      "val": "49ffffffff"
+   }
+```
+
+* `{cmd: "SHUTDOWN", val: ""}` - Envia sinal para desligar máquinas rodando os clientes.
+  
+```json
+   {
+      "cmd": "SHUTDOWN",
+      "val": ""
+   }
+```
+
+## CONFIG
+
+You should create your own **secrets.ini** file. Like this:
+
+```bash
 [secrets]
 MQTT_HOST = 192.168.50.21
 MQTT_USER = your_mqqt_user
@@ -137,10 +196,21 @@ UPS_NAME = SMS
 UPS_ID = 01
 UPS_BATERY_LEVEL = 60
 
+```
 
+On an Apple iMac (OSX) you can try other commands to shut down the computer.
 
-** atualizar Rasbian
+Put this in your configuration file.
 
+```bash
+osascript -e 'tell app "System Events" to shut down'
+```
+
+## Rasbian reload
+
+Reload the configuration after config file changes.
+
+```bash
 sudo systemctl stop smsUPS.service
 sudo git reset --hard
 sudo git pull
@@ -148,13 +218,12 @@ sudo git merge origin/master
 sudo rm /var/tmp/smsUPS.*
 sudo systemctl start smsUPS.service
 sudo systemctl status smsUPS.service
+```
 
 
 
-Outros comandos para desligar o iMac (osx)
-osascript -e 'tell app "System Events" to shut down'
 
-
+###  Other things:
 
 switch.json
-   Quando '#' na primeira letra do nome, não carrega.
+> Quando '#' na primeira letra do nome, não carrega.
