@@ -5,6 +5,7 @@ import time
 import struct
 import binascii
 import os
+import pathlib
 import paho.mqtt.client as mqtt
 import configparser
 import json
@@ -44,11 +45,12 @@ SHUTDOWN_CMD = '"sudo shutdown -h now", "sudo shutdown now", "systemctl poweroff
 # CONFIG Device
 UPS_NAME='UPS'
 UPS_ID = '01'
-UPS_BATERY_LEVEL = 60
+UPS_NAME_ID = 'UPS_01'
+UPS_BATERY_LEVEL = 30
 
 
 # CONST
-VERSAO = '0.20'
+VERSAO = '0.24'
 CR = '0D'
 MANUFACTURER = 'dmslabs'
 VIA_DEVICE = 'smsUPS'
@@ -85,6 +87,10 @@ gDevices_enviados = { 'b': False, 't':datetime.now() }  # Global - Controla quan
 gMqttEnviado = { 'b': False, 't':datetime.now() }  # Global - Controla quando publicar novamente
 serialOk = False
 porta_atual = 0
+clientOk = False
+PATH_ROOT = pathlib.Path().absolute()
+PATH_ROOT = str(PATH_ROOT.resolve())
+
 
 noBreakInfo = {'name':'',
     'info':''} 
@@ -120,7 +126,7 @@ statusLast = status.copy()
 
 json_hass = {"sensor": '''
 { 
-  "stat_t": "home/ups/json",
+  "stat_t": "home/$ups_id/json",
   "name": "$name",
   "uniq_id": "$uniq_id",
   "val_tpl": "{{ value_json.$val_tpl }}",
@@ -131,7 +137,7 @@ json_hass = {"sensor": '''
 }''',
     "binary_sensor": '''
 { 
-  "stat_t": "home/ups/json",
+  "stat_t": "home/$ups_id/json",
   "name": "$name",
   "uniq_id": "$uniq_id",
   "val_tpl": "{{ value_json.$val_tpl }}",
@@ -146,7 +152,7 @@ json_hass = {"sensor": '''
 ''',
     "switch": '''
 { 
-  "stat_t": "home/ups/json",
+  "stat_t": "home/$ups_id/json",
   "name": "$name",
   "cmd_t":"$cmd_t",
   "icon":"$icon",
@@ -218,13 +224,25 @@ def get_secrets():
     global ECHO
     global UPS_NAME
     global UPS_ID
+    global UPS_NAME_ID
     global UPS_BATERY_LEVEL
     global SMSUPS_SERVER
     global SMSUPS_CLIENTE
     global LOG_FILE
     global LOG_LEVEL
     global SHUTDOWN_CMD
+    global SECRETS
     print ("Getting config file.")
+    bl_existe_secrets = os.path.isfile(SECRETS)
+    if bl_existe_secrets:
+        log.debug("Existe " + SECRETS)
+        print ("Existe " +  SECRETS)
+    else:
+        log.warning("Não existe " + SECRETS)
+        print ("Não existe " +  SECRETS)
+        # SECRETS = "/" + SECRETS # tenta arrumar para o HASS.IO
+        # O ideal é o SECRETS ficar no data, para não perder a cada iniciada.
+
     #log.debug("Getting config file.")
     try:
         from configparser import ConfigParser
@@ -233,9 +251,14 @@ def get_secrets():
         from ConfigParser import ConfigParser  # ver. < 3.0
     try:
         config.read(SECRETS)
-    except:
+    except Exception as e:
         log.warning("Can't load config. Using default config.")
-        print ("defalt config")
+        print ("Can't load config. Using default config.")
+        mostraErro(e,20, "get_secrets")
+        # ver - INFO get_secrets / Error! Code: DuplicateOptionError, Message,
+        #  While reading from 'secrets.ini' [line 22]: option 'log_file' in section 'config' 
+        # already exists
+
     # le os dados
     MQTT_PASSWORD = get_config(config, 'secrets', 'MQTT_PASS', MQTT_PASSWORD)
     MQTT_USERNAME  = get_config(config, 'secrets', 'MQTT_USER', MQTT_USERNAME)
@@ -254,6 +277,9 @@ def get_secrets():
     ECHO = get_config(config, 'config','ECHO', ECHO, getBool=True)
     UPS_NAME = get_config(config, 'device','UPS_NAME', UPS_NAME) 
     UPS_ID = get_config(config, 'device','UPS_ID', UPS_ID)
+    UPS_NAME_ID = UPS_NAME + "_" + UPS_ID
+    MQTT_PUB = MQTT_PUB + "_" + UPS_NAME_ID
+    UPS_NAME_ID = "ups_" + UPS_NAME_ID
     UPS_BATERY_LEVEL = get_config(config, 'device','UPS_BATERY_LEVEL', UPS_BATERY_LEVEL, getInt=True) 
     SMSUPS_SERVER = get_config(config, 'config', 'SMSUPS_SERVER', SMSUPS_SERVER, getBool=True)
     SMSUPS_CLIENTE = get_config(config, 'config', 'SMSUPS_CLIENTE', SMSUPS_CLIENTE, getBool=True)
@@ -360,6 +386,7 @@ def send_clients_status():
     dadosEnviar['UUID'] = UUID
     # dadosEnviar['time'] = datetime.today().strftime('%Y-%m-%d %H:%M:%S')
     dadosEnviar['version'] = VERSAO
+    dadosEnviar['UPS_NAME_ID'] = UPS_NAME_ID
     jsonStatus = json.dumps(dadosEnviar)
     client.publish(mqtt_topic, jsonStatus)
 
@@ -371,7 +398,7 @@ def get_ip(change_dot = False):
         s.connect(('192.168.1.1', 1))
         IP = s.getsockname()[0]
     except Exception:
-        IP = '127.0.0.1'
+        IP = '0.0.0.1'
     finally:
         s.close()
     if change_dot: IP=IP.replace('.','-')
@@ -680,6 +707,14 @@ def publicaDados(upsData):
             status[APP_NAME] = "off"
         send_clients_status()
 
+def pegaEnv(env):
+    ret = ""
+    try:
+        ret = os.environ[env]
+    except:
+        ret = ""
+    return ret
+
 def queryQ(raw = ""):
     ''' get ups data and publish'''
     global status
@@ -692,7 +727,14 @@ def queryQ(raw = ""):
     else:
         x = raw
     lista_dados = trataRetorno(x)
-    upsData = dadosNoBreak(lista_dados)
+    try:
+        upsData = dadosNoBreak(lista_dados)
+    except Exception as e:
+        mostraErro(e)
+        log.debug('lista_dados: ' + str(lista_dados))
+        log.debug('x: ' + str(x))
+        log.debug('deu erro queryQ')
+        exit()
     if gNoBreakLast['time'] == '': gNoBreakLast = upsData.copy()
     if False: # ECHO
         print ('---------')
@@ -785,12 +827,18 @@ def send_hass():
                  'device_name': noBreakInfo['name'],
                  'identifiers': UPS_NAME + "_" + UPS_ID,
                  'via_device': VIA_DEVICE,
+                 'ups_id': UPS_NAME_ID,
                  'uniq_id': UPS_ID}
     
     log.debug('Sensor_dic: ' + str(len(sensor_dic)))
     if len(sensor_dic) == 0:
         for k in json_hass.items():
-            json_file = open(k[0] + '.json')
+            json_file_path = k[0] + '.json'
+            if IN_HASSIO:
+                json_file_path = '/' + json_file_path  # to run on RASS.IO
+            if not os.path.isfile(json_file_path):
+                log.error(json_file_path + " not found!")
+            json_file = open(json_file_path)
             json_str = json_file.read()
             sensor_dic[k[0]] = json.loads(json_str)
 
@@ -840,38 +888,95 @@ def abre_serial():
                 abre_serial()
     return serialOk
 
+def mqttStart():
+    ''' Start MQTT '''
+    global client
+    global clientOk
+    # MQTT Start
+    client = mqtt.Client()
+    log.info("Starting MQTT " + MQTT_HOST)
+    client.username_pw_set(username=MQTT_USERNAME, password=MQTT_PASSWORD)
+    client.on_connect = on_connect
+    client.on_message = on_message
+    client.on_disconnect = on_disconnect
+    try:
+        clientOk = True
+        client.connect(MQTT_HOST, 1883, 60)
+    except Exception as e:  # OSError
+        if e.__class__.__name__ == 'OSError':
+            clientOk = False
+            log.warning("Can't start MQTT")
+            print ("Can't start MQTT")  # e.errno = 51 -  'Network is unreachable'
+            mostraErro(e,20, "MQTT Start")
+        else:
+            clientOk = False
+            mostraErro(e,30, "MQTT Start")
+    if clientOk:  client.loop_start()  # start the loop
 
 
-# APP START
+def iniciaLoggerStdout():
+    log = logging.getLogger()
+    log.setLevel(logging.DEBUG)
+    handler = logging.StreamHandler(sys.stdout)
+    handler.setLevel(logging.DEBUG)
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    handler.setFormatter(formatter)
+    log.addHandler(handler)
+    return log
 
-print("********** SMS UPS v." + VERSAO)
+def iniciaLogger():
+    log = logging.getLogger('smsUPS')
+    erroDif = False
+    try:
+        hdlr = logging.FileHandler(LOG_FILE)
+    except PermissionError:  # caso não consiga abrir
+        hdlr = logging.FileHandler('./smsUPS.log')
+    except Exception as e:
+        erroDif = e
+    finally:
+        formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s')
+        hdlr.setFormatter(formatter)
+        log.addHandler(hdlr) 
+        log.setLevel(LOG_LEVEL)
+    if erroDif != False:
+        # different error
+        mostraErro(e, 20, 'Open LOG_FILE')
+    if hdlr.baseFilename != LOG_FILE:
+        print ('LOG file: ', hdlr.baseFilename)
+        log.debug ('LOG file: ' + hdlr.baseFilename)
+    return log
+
+# APP START - Inicio
+
+print ("********** SMS UPS v." + VERSAO)
 print ("Starting up... " + datetime.today().strftime('%Y-%m-%d %H:%M:%S'))
 
+# hass.io token
+IN_HASSIO = ( pegaEnv('HASSIO_TOKEN') != "" and PATH_ROOT == "/data")
+
 #LOG
-log = logging.getLogger('smsUPS')
-erroDif = False
-try:
-    hdlr = logging.FileHandler(LOG_FILE)
-except PermissionError:  # caso não consiga abrir
-    hdlr = logging.FileHandler('./smsUPS.log')
-except Exception as e:
-    erroDif = e
-finally:
-    formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s')
-    hdlr.setFormatter(formatter)
-    log.addHandler(hdlr) 
-    log.setLevel(LOG_LEVEL)
+if IN_HASSIO:
+    log = iniciaLoggerStdout()
+else:
+    log = iniciaLogger()
 
 log.debug("********** SMS UPS v." + VERSAO)
 log.debug("Starting up...")
 
-if erroDif != False:
-    # different error
-    mostraErro(e, 20, 'Open LOG_FILE')
+print ("Path: " + PATH_ROOT)
+log.debug ("Path: " + PATH_ROOT)
 
-if hdlr.baseFilename != LOG_FILE:
-    print ('LOG file: ', hdlr.baseFilename)
-    log.debug ('LOG file: ' + hdlr.baseFilename)
+print (os.environ)
+
+print("hassio_token:" + pegaEnv('HASSIO_TOKEN'))
+print ("Running inside HASSIO ", str(IN_HASSIO))
+log.debug ("Running inside HASSIO " + str(IN_HASSIO))
+
+log.debug ("env1:" + pegaEnv("MQTT_HOST"))
+log.debug ("env2:" + pegaEnv("CONFIG_PATH"))
+log.debug ("env3:" + pegaEnv("TESTE"))
+
+
 
 get_secrets()
 log.setLevel(LOG_LEVEL)
@@ -898,24 +1003,16 @@ except Exception as e:
 # if 'VIRTUAL_ENV' in osEnv
 # log.info("VIRTUAL_ENV: " + osEnv['VIRTUAL_ENV'])
 
-# MQTT Start
-log.info("Starting MQTT " + MQTT_HOST)
-client = mqtt.Client()
-client.username_pw_set(username=MQTT_USERNAME, password=MQTT_PASSWORD)
-client.on_connect = on_connect
-client.on_message = on_message
-client.on_disconnect = on_disconnect
-client.connect(MQTT_HOST, 1883, 60)
-client.loop_start()  # start the loop
-log.info("MQTT OK")
-
 # signals monitor
 signal.signal(signal.SIGTERM, sigterm_handler)
 signal.signal(signal.SIGUSR1, receive_signal)
 signal.signal(signal.SIGUSR2, receive_signal)
 
 while not Connected:
+    mqttStart()
     time.sleep(1)  # wait for connection
+    if not clientOk:
+        time.sleep(240)
 
 serialOk = False
 
@@ -947,6 +1044,7 @@ while True:
                     send_hass() 
         if not serialOk:
             serialOk = abre_serial()
+        if not clientOk: mqttStart()  # tenta client mqqt novamente.
     time.sleep(INTERVALO_SERIAL) # dá um tempo
 
 
