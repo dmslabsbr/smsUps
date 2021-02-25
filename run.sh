@@ -4,19 +4,29 @@ set +u
 CONFIG_PATH=/data/options.json
 SYSTEM_USER=/data/system_user.json
 
-TESTE="/data/teste"
+bashio::log.red "Exporting config data"
 
-LOGINS=$(jq --raw-output ".logins | length" $CONFIG_PATH)
-ANONYMOUS=$(jq --raw-output ".anonymous" $CONFIG_PATH)
-KEYFILE=$(jq --raw-output ".keyfile" $CONFIG_PATH)
-CERTFILE=$(jq --raw-output ".certfile" $CONFIG_PATH)
-CAFILE=$(jq --raw-output --exit-status ".cafile | select (.!=null)" $CONFIG_PATH || echo "$CERTFILE")
-REQUIRE_CERTIFICATE=$(jq --raw-output ".require_certificate" $CONFIG_PATH)
-CUSTOMIZE_ACTIVE=$(jq --raw-output ".customize.active" $CONFIG_PATH)
-LOGGING=$(bashio::info 'hassio.info.logging' '.logging')
+export MQTT_HOST=$(jq --raw-output '.MQTT_HOST' $CONFIG_PATH)
+export MQTT_USER=$(jq --raw-output '.MQTT_USER' $CONFIG_PATH)
+export MQTT_PASS=$(jq --raw-output '.MQTT_PASS' $CONFIG_PATH)
+export SMSUPS_SERVER=$(jq --raw-output '.SMSUPS_SERVER' $CONFIG_PATH)
+export SMSUPS_CLIENTE=$(jq --raw-output '.SMSUPS_CLIENTE' $CONFIG_PATH)
+export PORTA=$(jq --raw-output '.PORTA' $CONFIG_PATH)
+export SHUTDOWN_CMD=$(jq --raw-output '.SHUTDOWN_CMD' $CONFIG_PATH)
+export SMSUPS_SERVER=$(jq --raw-output '.SMSUPS_SERVER' $CONFIG_PATH)
+export UPS_NAME=$(jq --raw-output '.UPS_NAME' $CONFIG_PATH)
+export UPS_ID=$(jq --raw-output '.UPS_ID' $CONFIG_PATH)
+
 
 bashio::log.info "PATH: "
 pwd
+
+echo $MQTT_HOST
+echo $TESTE
+echo $CONFIG_PATH
+
+
+
 
 bashio::log.info "secrets.ini exists?"
 
@@ -33,12 +43,6 @@ else
         cp /secrets.ini /data 
     fi    
 fi
-
-#bashio::log.info "getting information..."
-#MQTT_HOST=$(bashio::services mqtt "host")
-#MQTT_USER=$(bashio::services mqtt "username")
-#MQTT_PASSWORD=$(bashio::services mqtt "password")
-
 
 echo "SMS BRASIL UPS"
 python3 ../smsUPS.py

@@ -205,6 +205,31 @@ def mostraErro(e, nivel=10, msg_add=""):
     if nivel == logging.CRITICAL: log.critical(err_msg)   # 50
     # log.warning (err_msg) 
 
+def substitui_secrets():
+    "No HASS.IO ADD-ON substitui os dados do secrets.ini pelos do options.json"
+    global MQTT_HOST
+    global MQTT_PASSWORD
+    global MQTT_USERNAME
+    global PORTA
+    global UPS_NAME
+    global UPS_ID
+    global UPS_NAME_ID
+    global SMSUPS_SERVER
+    global SMSUPS_CLIENTE
+    global SHUTDOWN_CMD
+
+    MQTT_HOST = pegaEnv("MQTT_HOST")
+    MQTT_PASSWORD = pegaEnv("MQTT_PASSWORD")
+    MQTT_USERNAME = pegaEnv("MQTT_USERNAME")
+    PORTA = pegaEnv("PORTA")
+    UPS_NAME = pegaEnv("UPS_NAME")
+    UPS_ID = pegaEnv("UPS_ID")
+    UPS_NAME_ID = pegaEnv("UPS_NAME_ID")
+    SMSUPS_SERVER = pegaEnv("SMSUPS_SERVER")
+    SMSUPS_CLIENTE = pegaEnv("SMSUPS_CLIENTE")
+    SHUTDOWN_CMD = pegaEnv("SHUTDOWN_CMD")
+    log.debug ("Env data loaded.")
+
 def get_secrets():
     ''' GET configuration data '''
     global MQTT_HOST
@@ -973,15 +998,15 @@ print ("Running inside HASSIO ", str(IN_HASSIO))
 log.debug ("Running inside HASSIO " + str(IN_HASSIO))
 
 log.debug ("env1:" + pegaEnv("MQTT_HOST"))
-log.debug ("env2:" + pegaEnv("CONFIG_PATH"))
-log.debug ("env3:" + pegaEnv("TESTE"))
-
-
 
 get_secrets()
 log.setLevel(LOG_LEVEL)
 status['ip'] = get_ip()
 
+# Pega dados do hass, se estiver nele.
+
+if IN_HASSIO:
+    substitui_secrets()
 
 log.debug("SMSUPS_SERVER: " + str(SMSUPS_SERVER))
 log.debug("SMSUPS_CLIENTE: " + str(SMSUPS_CLIENTE))
