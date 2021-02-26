@@ -8,7 +8,7 @@
             "request": "launch",
             "program": "${file}",
             "console": "integratedTerminal",
-            "pythonPath": "/Users/dms/Dropbox/dms/Source-py/smsUps/smsUPS/bin/python3"
+            "python": "/Users/dms/Dropbox/dms/Source-py/smsUps/smsUPS/bin/python3"
         }
     ]
 }

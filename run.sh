@@ -16,12 +16,14 @@ export SHUTDOWN_CMD=$(jq --raw-output '.SHUTDOWN_CMD' $CONFIG_PATH)
 export SMSUPS_SERVER=$(jq --raw-output '.SMSUPS_SERVER' $CONFIG_PATH)
 export UPS_NAME=$(jq --raw-output '.UPS_NAME' $CONFIG_PATH)
 export UPS_ID=$(jq --raw-output '.UPS_ID' $CONFIG_PATH)
+export USE_SECRETS=$(jq --raw-output '.USE_SECRETS' $CONFIG_PATH)
 
 
 bashio::log.info "PATH: "
 pwd
 
-echo $MQTT_HOST
+echo MQTT_HOST -> $MQTT_HOST
+echo MQTT_PASS -> $MQTT_PASS
 echo $TESTE
 echo $CONFIG_PATH
 

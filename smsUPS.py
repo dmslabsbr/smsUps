@@ -50,7 +50,7 @@ UPS_BATERY_LEVEL = 30
 
 
 # CONST
-VERSAO = '0.24'
+VERSAO = '0.25'
 CR = '0D'
 MANUFACTURER = 'dmslabs'
 VIA_DEVICE = 'smsUPS'
@@ -59,6 +59,8 @@ APP_NAME = 'smsUPS'
 MQTT_CMD_SHUTDOWN = '{"cmd": "SHUTDOWN","val": ""}'
 UUID = str(uuid.uuid1())
 INTERVALO_EXPIRE = int(INTERVALO_MQTT * INTERVALO_SERIAL)
+DEFAULT_MQTT_PASS = "mqtt_pass"
+USE_SECRETS = True
 
 respostaH = [None] * 18
 
@@ -217,17 +219,21 @@ def substitui_secrets():
     global SMSUPS_SERVER
     global SMSUPS_CLIENTE
     global SHUTDOWN_CMD
+    global USE_SECRETS
 
     MQTT_HOST = pegaEnv("MQTT_HOST")
-    MQTT_PASSWORD = pegaEnv("MQTT_PASSWORD")
-    MQTT_USERNAME = pegaEnv("MQTT_USERNAME")
+    MQTT_PASSWORD = pegaEnv("MQTT_PASS")
+    MQTT_USERNAME = pegaEnv("MQTT_USER")
     PORTA = pegaEnv("PORTA")
     UPS_NAME = pegaEnv("UPS_NAME")
     UPS_ID = pegaEnv("UPS_ID")
     UPS_NAME_ID = pegaEnv("UPS_NAME_ID")
+    setaUpsNameId()
     SMSUPS_SERVER = pegaEnv("SMSUPS_SERVER")
     SMSUPS_CLIENTE = pegaEnv("SMSUPS_CLIENTE")
     SHUTDOWN_CMD = pegaEnv("SHUTDOWN_CMD")
+    SHUTDOWN_CMD = SHUTDOWN_CMD.split(',')
+    USE_SECRETS = pegaEnv("USE_SECRETS")
     log.debug ("Env data loaded.")
 
 def get_secrets():
@@ -257,6 +263,7 @@ def get_secrets():
     global LOG_LEVEL
     global SHUTDOWN_CMD
     global SECRETS
+
     print ("Getting config file.")
     bl_existe_secrets = os.path.isfile(SECRETS)
     if bl_existe_secrets:
@@ -302,9 +309,10 @@ def get_secrets():
     ECHO = get_config(config, 'config','ECHO', ECHO, getBool=True)
     UPS_NAME = get_config(config, 'device','UPS_NAME', UPS_NAME) 
     UPS_ID = get_config(config, 'device','UPS_ID', UPS_ID)
-    UPS_NAME_ID = UPS_NAME + "_" + UPS_ID
-    MQTT_PUB = MQTT_PUB + "_" + UPS_NAME_ID
-    UPS_NAME_ID = "ups_" + UPS_NAME_ID
+    setaUpsNameId()
+    #UPS_NAME_ID = UPS_NAME + "_" + UPS_ID
+    #MQTT_PUB = MQTT_PUB + "_" + UPS_NAME_ID
+    #UPS_NAME_ID = "ups_" + UPS_NAME_ID
     UPS_BATERY_LEVEL = get_config(config, 'device','UPS_BATERY_LEVEL', UPS_BATERY_LEVEL, getInt=True) 
     SMSUPS_SERVER = get_config(config, 'config', 'SMSUPS_SERVER', SMSUPS_SERVER, getBool=True)
     SMSUPS_CLIENTE = get_config(config, 'config', 'SMSUPS_CLIENTE', SMSUPS_CLIENTE, getBool=True)
@@ -313,6 +321,20 @@ def get_secrets():
     SHUTDOWN_CMD = get_config(config, 'config', 'SHUTDOWN_CMD', SHUTDOWN_CMD, split = True)
 
     if ENVIA_HASS: ENVIA_JSON = True
+
+
+def setaUpsNameId():
+    "Seta o UPS_NAME_ID e o MQTT_PUB"
+    global UPS_NAME
+    global UPS_ID
+    global UPS_NAME_ID
+    global MQTT_PUB
+
+    name_id = UPS_NAME + "_" + UPS_ID
+    UPS_NAME_ID = "ups_" + name_id
+    MQTT_PUB = get_config(config, 'config', 'MQTT_PUB', MQTT_PUB)
+    MQTT_PUB = MQTT_PUB + "_" + name_id
+
 
 def sigterm_handler(_signo, _stack_frame):
     ''' on_stop / onstop'''
@@ -397,8 +419,8 @@ def on_connect(client, userdata, flags, rc):
         Connected = False
         status['mqtt'] = "off"
         if rc>5: rc=100
-        print (rc + tp_c[rc])
-        log.error(rc + tp_c[rc])
+        print (str(rc) + str(tp_c[rc]))
+        log.error(str(rc) + str(tp_c[rc]))
         # tratar quando for 3 e outros
 
 
@@ -1005,16 +1027,30 @@ status['ip'] = get_ip()
 
 # Pega dados do hass, se estiver nele.
 
-if IN_HASSIO:
+if IN_HASSIO and not USE_SECRETS:
     substitui_secrets()
+    if DEFAULT_MQTT_PASS == MQTT_PASSWORD:
+        log.warning ("YOU SHOUD CHANGE DE DEFAULT MQTT PASSWORD!")
+        print ("YOU SHOUD CHANGE DE DEFAULT MQTT PASSWORD!")
+
+    log.debug("SMSUPS_SERVER: " + str(SMSUPS_SERVER))
+    log.debug("SMSUPS_CLIENTE: " + str(SMSUPS_CLIENTE))
+    log.debug("MQTT_HOST: " + str(MQTT_HOST))
+    log.debug("IP: " + status['ip'])
+    print ("SMSUPS_SERVER: " + str(SMSUPS_SERVER))
+    print ("SMSUPS_CLIENTE: " + str(SMSUPS_CLIENTE))
+    print ("IP: " + status['ip'])
 
 log.debug("SMSUPS_SERVER: " + str(SMSUPS_SERVER))
 log.debug("SMSUPS_CLIENTE: " + str(SMSUPS_CLIENTE))
 log.debug("IP: " + status['ip'])
+log.debug("MQTT_HOST: " + str(MQTT_HOST))
+log.debug("MQTT_PASSWORD: " + str(MQTT_PASSWORD))
+if (SMSUPS_SERVER):
+    log.debug("SMSUPS_SERVER: TRUE")
 print ("SMSUPS_SERVER: " + str(SMSUPS_SERVER))
 print ("SMSUPS_CLIENTE: " + str(SMSUPS_CLIENTE))
 print ("IP: " + status['ip'])
-
 
 # info
 try:
