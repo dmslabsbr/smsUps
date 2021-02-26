@@ -50,7 +50,7 @@ UPS_BATERY_LEVEL = 30
 
 
 # CONST
-VERSAO = '0.25'
+VERSAO = '0.26'
 CR = '0D'
 MANUFACTURER = 'dmslabs'
 VIA_DEVICE = 'smsUPS'
@@ -216,6 +216,7 @@ def substitui_secrets():
     global UPS_NAME
     global UPS_ID
     global UPS_NAME_ID
+    global MQTT_PUB
     global SMSUPS_SERVER
     global SMSUPS_CLIENTE
     global SHUTDOWN_CMD
@@ -264,32 +265,9 @@ def get_secrets():
     global SHUTDOWN_CMD
     global SECRETS
 
-    print ("Getting config file.")
-    bl_existe_secrets = os.path.isfile(SECRETS)
-    if bl_existe_secrets:
-        log.debug("Existe " + SECRETS)
-        print ("Existe " +  SECRETS)
-    else:
-        log.warning("Não existe " + SECRETS)
-        print ("Não existe " +  SECRETS)
-        # SECRETS = "/" + SECRETS # tenta arrumar para o HASS.IO
-        # O ideal é o SECRETS ficar no data, para não perder a cada iniciada.
+    config = getConfigParser()
 
-    #log.debug("Getting config file.")
-    try:
-        from configparser import ConfigParser
-        config = ConfigParser()
-    except ImportError:
-        from ConfigParser import ConfigParser  # ver. < 3.0
-    try:
-        config.read(SECRETS)
-    except Exception as e:
-        log.warning("Can't load config. Using default config.")
-        print ("Can't load config. Using default config.")
-        mostraErro(e,20, "get_secrets")
-        # ver - INFO get_secrets / Error! Code: DuplicateOptionError, Message,
-        #  While reading from 'secrets.ini' [line 22]: option 'log_file' in section 'config' 
-        # already exists
+    print ("Reading secrets.ini")
 
     # le os dados
     MQTT_PASSWORD = get_config(config, 'secrets', 'MQTT_PASS', MQTT_PASSWORD)
@@ -322,6 +300,33 @@ def get_secrets():
 
     if ENVIA_HASS: ENVIA_JSON = True
 
+def getConfigParser():
+    print ("Getting Config Parser.")
+    bl_existe_secrets = os.path.isfile(SECRETS)
+    if bl_existe_secrets:
+        log.debug("Existe " + SECRETS)
+        print ("Existe " +  SECRETS)
+    else:
+        log.warning("Não existe " + SECRETS)
+        print ("Não existe " +  SECRETS)
+        # SECRETS = "/" + SECRETS # tenta arrumar para o HASS.IO
+        # O ideal é o SECRETS ficar no data, para não perder a cada iniciada.
+
+    try:
+        from configparser import ConfigParser
+        config = ConfigParser()
+    except ImportError:
+        from ConfigParser import ConfigParser  # ver. < 3.0
+    try:
+        config.read(SECRETS)
+    except Exception as e:
+        log.warning("Can't load config. Using default config.")
+        print ("Can't load config. Using default config.")
+        mostraErro(e,20, "get_secrets")
+        # ver - INFO get_secrets / Error! Code: DuplicateOptionError, Message,
+        #  While reading from 'secrets.ini' [line 22]: option 'log_file' in section 'config' 
+        # already exists
+    return config
 
 def setaUpsNameId():
     "Seta o UPS_NAME_ID e o MQTT_PUB"
@@ -332,6 +337,7 @@ def setaUpsNameId():
 
     name_id = UPS_NAME + "_" + UPS_ID
     UPS_NAME_ID = "ups_" + name_id
+    config = getConfigParser()
     MQTT_PUB = get_config(config, 'config', 'MQTT_PUB', MQTT_PUB)
     MQTT_PUB = MQTT_PUB + "_" + name_id
 
