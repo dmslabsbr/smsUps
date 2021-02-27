@@ -1036,7 +1036,7 @@ get_secrets()
 log.setLevel(LOG_LEVEL)
 status['ip'] = get_ip()
 
-log.debug ("PORTA secrets: " + PORTA)
+log.debug ("PORTA secrets: " + str(PORTA))
 
 # Pega dados do hass, se estiver nele.
 
