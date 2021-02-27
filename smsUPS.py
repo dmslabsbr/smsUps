@@ -1036,13 +1036,13 @@ get_secrets()
 log.setLevel(LOG_LEVEL)
 status['ip'] = get_ip()
 
-log.debug ("PORTA secrets: " + str(PORTA))
+log.debug ("PORTA secrets: " + ''.join(PORTA))
 
 # Pega dados do hass, se estiver nele.
 
 if IN_HASSIO:
     substitui_secrets()
-    log.debug ("PORTA substitui: " + PORTA)
+    log.debug ("PORTA substitui: " + ''.join(PORTA))
     if USE_SECRETS:
         # se for para usar o secrets, carrega ele novamente.
         get_secrets()
