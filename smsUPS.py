@@ -1038,6 +1038,8 @@ status['ip'] = get_ip()
 if IN_HASSIO:
     substitui_secrets()
     log.debug("USE_SECRETS: " + str(USE_SECRETS))
+    log.debug("USE_SECRETS F: " + str(USE_SECRETS == False))
+    log.debug("USE_SECRETS T: " + str(USE_SECRETS == True))
     if USE_SECRETS:
         # se for para usar o secrets, carrega ele novamente.
         get_secrets()
