@@ -1028,22 +1028,21 @@ log.debug ("Path: " + PATH_ROOT)
 # print (os.environ)
 
 print("hassio_token:" + pegaEnv('HASSIO_TOKEN'))
-print ("Running inside HASSIO ", str(IN_HASSIO))
 log.debug ("Running inside HASSIO " + str(IN_HASSIO))
 
-log.debug ("env1:" + pegaEnv("MQTT_HOST"))
+log.debug ("env1:" + pegaEnv("PORTA"))
 
 get_secrets()
 log.setLevel(LOG_LEVEL)
 status['ip'] = get_ip()
 
+log.debug ("PORTA secrets: " + PORTA)
+
 # Pega dados do hass, se estiver nele.
 
 if IN_HASSIO:
     substitui_secrets()
-    log.debug("USE_SECRETS: " + str(USE_SECRETS))
-    log.debug("USE_SECRETS F: " + str(USE_SECRETS == False))
-    log.debug("USE_SECRETS T: " + str(USE_SECRETS == True))
+    log.debug ("PORTA substitui: " + PORTA)
     if USE_SECRETS:
         # se for para usar o secrets, carrega ele novamente.
         get_secrets()
