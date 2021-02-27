@@ -232,7 +232,7 @@ def substitui_secrets():
     UPS_NAME_ID = pegaEnv("UPS_NAME_ID")
     setaUpsNameId()
     SMSUPS_SERVER = str2bool(pegaEnv("SMSUPS_SERVER"))
-    SMSUPS_CLIENTE = str2boolpegaEnv("SMSUPS_CLIENTE"))
+    SMSUPS_CLIENTE = str2bool(pegaEnv("SMSUPS_CLIENTE"))
     SHUTDOWN_CMD = pegaEnv("SHUTDOWN_CMD")
     SHUTDOWN_CMD = SHUTDOWN_CMD.split(',')
     USE_SECRETS = str2bool(pegaEnv("USE_SECRETS"))
