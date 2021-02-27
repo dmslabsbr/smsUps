@@ -231,11 +231,11 @@ def substitui_secrets():
     UPS_ID = pegaEnv("UPS_ID")
     UPS_NAME_ID = pegaEnv("UPS_NAME_ID")
     setaUpsNameId()
-    SMSUPS_SERVER = pegaEnv("SMSUPS_SERVER")
-    SMSUPS_CLIENTE = pegaEnv("SMSUPS_CLIENTE")
+    SMSUPS_SERVER = str2bool(pegaEnv("SMSUPS_SERVER"))
+    SMSUPS_CLIENTE = str2boolpegaEnv("SMSUPS_CLIENTE"))
     SHUTDOWN_CMD = pegaEnv("SHUTDOWN_CMD")
     SHUTDOWN_CMD = SHUTDOWN_CMD.split(',')
-    USE_SECRETS = pegaEnv("USE_SECRETS")
+    USE_SECRETS = str2bool(pegaEnv("USE_SECRETS"))
     log.debug ("Env data loaded.")
 
 def get_secrets():
@@ -300,6 +300,10 @@ def get_secrets():
     SHUTDOWN_CMD = get_config(config, 'config', 'SHUTDOWN_CMD', SHUTDOWN_CMD, split = True)
 
     if ENVIA_HASS: ENVIA_JSON = True
+
+def str2bool(v):
+    "Para evitar problemas com variaveis booleanas inportadas"
+  return v.lower() in ("yes", "true", "t", "1", "on", "v")
 
 def getConfigParser():
     print ("Getting Config Parser.")
@@ -1021,7 +1025,7 @@ log.debug("Starting up...")
 print ("Path: " + PATH_ROOT)
 log.debug ("Path: " + PATH_ROOT)
 
-print (os.environ)
+# print (os.environ)
 
 print("hassio_token:" + pegaEnv('HASSIO_TOKEN'))
 print ("Running inside HASSIO ", str(IN_HASSIO))
