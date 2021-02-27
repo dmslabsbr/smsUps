@@ -43,7 +43,7 @@ else
     fi    
 fi
 
-echo "SMS BRASIL UPS"
+bashio::log.blue "SMS BRASIL UPS - dmslabs"
 python3 ../smsUPS.py
 echo "Run Webserver"
 python3 -m http.server 8000

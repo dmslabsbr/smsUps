@@ -302,8 +302,8 @@ def get_secrets():
     if ENVIA_HASS: ENVIA_JSON = True
 
 def str2bool(v):
-    "Para evitar problemas com variaveis booleanas inportadas"
-  return v.lower() in ("yes", "true", "t", "1", "on", "v")
+    '''Para evitar problemas com variaveis booleanas inportadas'''
+    return v.lower() in ("yes", "true", "t", "1", "on", "v", "ligado")
 
 def getConfigParser():
     print ("Getting Config Parser.")
