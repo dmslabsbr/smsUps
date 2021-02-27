@@ -50,7 +50,7 @@ UPS_BATERY_LEVEL = 30
 
 
 # CONST
-VERSAO = '0.26'
+VERSAO = '0.27'
 CR = '0D'
 MANUFACTURER = 'dmslabs'
 VIA_DEVICE = 'smsUPS'
@@ -222,6 +222,7 @@ def substitui_secrets():
     global SHUTDOWN_CMD
     global USE_SECRETS
 
+    log.debug ("Loading env data....")
     MQTT_HOST = pegaEnv("MQTT_HOST")
     MQTT_PASSWORD = pegaEnv("MQTT_PASS")
     MQTT_USERNAME = pegaEnv("MQTT_USER")
@@ -948,6 +949,7 @@ def mqttStart():
     # MQTT Start
     client = mqtt.Client()
     log.info("Starting MQTT " + MQTT_HOST)
+    log.debug("mqttStart MQTT_PASSWORD: " + str(MQTT_PASSWORD))
     client.username_pw_set(username=MQTT_USERNAME, password=MQTT_PASSWORD)
     client.on_connect = on_connect
     client.on_message = on_message
@@ -1033,8 +1035,11 @@ status['ip'] = get_ip()
 
 # Pega dados do hass, se estiver nele.
 
-if IN_HASSIO and not USE_SECRETS:
+if IN_HASSIO:
     substitui_secrets()
+    if USE_SECRETS:
+        # se for para usar o secrets, carrega ele novamente.
+        get_secrets()
     if DEFAULT_MQTT_PASS == MQTT_PASSWORD:
         log.warning ("YOU SHOUD CHANGE DE DEFAULT MQTT PASSWORD!")
         print ("YOU SHOUD CHANGE DE DEFAULT MQTT PASSWORD!")

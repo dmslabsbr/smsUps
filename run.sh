@@ -22,11 +22,8 @@ export USE_SECRETS=$(jq --raw-output '.USE_SECRETS' $CONFIG_PATH)
 bashio::log.info "PATH: "
 pwd
 
-echo MQTT_HOST -> $MQTT_HOST
-echo MQTT_PASS -> $MQTT_PASS
-echo $TESTE
-echo $CONFIG_PATH
-
+bashio::log.green MQTT_HOST - $MQTT_HOST
+bashio::log.green MQTT_PASS - $MQTT_PASS
 
 
 

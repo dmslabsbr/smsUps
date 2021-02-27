@@ -1,22 +1,22 @@
-# <img align="center" src="hass.io.png" alt="" width="60" />  smsUPS Home Assistant add-on instructions 
+# <img align="center" src="https://github.com/dmslabsbr/smsUps/raw/master/hass.io.png" alt="" width="60" />  smsUPS Home Assistant add-on instructions 
 
 ## 1 - Add a new repository
 
 #### a) Inside *supervisor* tab, choice *Add-on store*.
 
-<img src="hass1.png" alt="Hass.io screen Add a new repository." width="500" /> 
+<img src="https://github.com/dmslabsbr/smsUps/raw/master/hass1.png" alt="Hass.io screen Add a new repository." width="500" /> 
 
 #### b) Add the **URL** (https://github.com/dmslabsbr/smsUps) of the repository and then press "**Add**". A new card for the repository will appear.
 
-<img src="hass2.png" alt="Hass.io screen Add a new repository." width="500" /> 
+<img src="https://github.com/dmslabsbr/smsUps/raw/master/hass2.png" alt="Hass.io screen Add a new repository." width="500" /> 
 
 #### c) Add the **URL** (https://github.com/dmslabsbr/smsUps) of the repository and then press "**Add**". A new card for the repository will appear.
 
-<img src="hass3.png" alt="Hass.io screen Add a new repository." width="400" /> 
+<img src="https://github.com/dmslabsbr/smsUps/raw/master/hass3.png" alt="Hass.io screen Add a new repository." width="400" /> 
 
 #### d) Click on the repository and proceed with add-on installation.
 
-<img src="hass4.png" alt="Hass.io screen Add a new repository." width="200" /> 
+<img src="https://github.com/dmslabsbr/smsUps/raw/master/hass4.png" alt="Hass.io screen Add a new repository." width="200" /> 
 
 #### e) Before the 1st use you must configure the add-on, in the Configuration tab. Where:
 
@@ -40,8 +40,8 @@
 ## Example:
 
 
-<img src="hass5.png" alt="Hass.io screen Add a new repository." width="200" /> 
+<img src="https://github.com/dmslabsbr/smsUps/raw/master/hass5.png" alt="Hass.io screen Add a new repository." width="200" /> 
 
-<img src="hass6.png" alt="Hass.io screen Add a new repository." width="200" /> 
+<img src="https://github.com/dmslabsbr/smsUps/raw/master/hass6.png" alt="Hass.io screen Add a new repository." width="200" /> 
 
 You can now use your UPS data in your Home Assistant.

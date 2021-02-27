@@ -1,4 +1,4 @@
-<img src="M3.jpeg" alt="" width="200" />
+<img src="https://github.com/dmslabsbr/smsUps/raw/master/M3.jpeg" alt="" width="200" />
 
 # smsUps
 Application to read data from SMS BRASIL UPS.
@@ -11,7 +11,7 @@ But you can use the application without using the Home Assistant. You just need 
 
 # Instructions
 
-<img align="center" src="hass.io.png" alt="" width="30" /> [Home Assistant add-on instructions](DOCS.md)
+<img align="center" src="https://github.com/dmslabsbr/smsUps/raw/master/hass.io.png" alt="" width="30" /> [Home Assistant add-on instructions](DOCS.md)
 
 Before run you need to install:
    https://github.com/eclipse/paho.mqtt.python 

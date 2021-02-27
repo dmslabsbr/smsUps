@@ -11,6 +11,7 @@ prot*.xml
 protocolos/
 secrets.ini
 /secrets.ini
+*.ini
 smsUPS.log
 .vscode/launch.json
 
