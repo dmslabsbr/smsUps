@@ -50,7 +50,7 @@ UPS_BATERY_LEVEL = 30
 
 
 # CONST
-VERSAO = '0.27'
+VERSAO = '0.28'
 CR = '0D'
 MANUFACTURER = 'dmslabs'
 VIA_DEVICE = 'smsUPS'
@@ -1037,6 +1037,7 @@ status['ip'] = get_ip()
 
 if IN_HASSIO:
     substitui_secrets()
+    log.debug("USE_SECRETS: " + str(USE_SECRETS))
     if USE_SECRETS:
         # se for para usar o secrets, carrega ele novamente.
         get_secrets()
