@@ -197,6 +197,15 @@ def get_config (config, topic, key, default, getBool = False, getInt = False, sp
             ret[i] = ret[i].strip()
     return ret
 
+def str2List(texto):
+    "Transforma um texto em uma lista"
+    ret = texto.split(',')
+    for i in range(len(ret)):
+        ret[i] = ret[i].replace('"','').replace("'", '')
+        ret[i] = ret[i].strip()
+    return ret
+    
+
 def mostraErro(e, nivel=10, msg_add=""):
     err_msg = msg_add + ' / Error! Code: {c}, Message, {m}'.format(c = type(e).__name__, m = str(e))
     print(err_msg)
@@ -226,7 +235,7 @@ def substitui_secrets():
     MQTT_HOST = pegaEnv("MQTT_HOST")
     MQTT_PASSWORD = pegaEnv("MQTT_PASS")
     MQTT_USERNAME = pegaEnv("MQTT_USER")
-    PORTA = pegaEnv("PORTA")
+    PORTA = str2List(pegaEnv("PORTA"))
     UPS_NAME = pegaEnv("UPS_NAME")
     UPS_ID = pegaEnv("UPS_ID")
     UPS_NAME_ID = pegaEnv("UPS_NAME_ID")
@@ -234,7 +243,7 @@ def substitui_secrets():
     SMSUPS_SERVER = str2bool(pegaEnv("SMSUPS_SERVER"))
     SMSUPS_CLIENTE = str2bool(pegaEnv("SMSUPS_CLIENTE"))
     SHUTDOWN_CMD = pegaEnv("SHUTDOWN_CMD")
-    SHUTDOWN_CMD = SHUTDOWN_CMD.split(',')
+    SHUTDOWN_CMD = str2List(SHUTDOWN_CMD)
     USE_SECRETS = str2bool(pegaEnv("USE_SECRETS"))
     log.debug ("Env data loaded.")
 
