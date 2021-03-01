@@ -14,6 +14,7 @@ secrets.ini
 *.ini
 smsUPS.log
 .vscode/launch.json
+smsUPS/
 
 # Distribution / packaging
 .Python
