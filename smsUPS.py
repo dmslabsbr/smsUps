@@ -16,7 +16,10 @@ import signal
 import sys
 from datetime import datetime
 from string import Template
+from paho.mqtt import client
 
+
+#TODO: Padronizar o formato do tempo impresso  datetime.now() e outros.
 
 # CONFIG
 SECRETS = 'secrets.ini'
@@ -50,7 +53,7 @@ UPS_BATERY_LEVEL = 30
 
 
 # CONST
-VERSAO = '0.28'
+VERSAO = '0.30'
 CR = '0D'
 MANUFACTURER = 'dmslabs'
 VIA_DEVICE = 'smsUPS'
@@ -92,6 +95,7 @@ porta_atual = 0
 clientOk = False
 PATH_ROOT = pathlib.Path().absolute()
 PATH_ROOT = str(PATH_ROOT.resolve())
+gLastMidMqtt = 0
 
 
 noBreakInfo = {'name':'',
@@ -131,10 +135,11 @@ json_hass = {"sensor": '''
   "stat_t": "home/$ups_id/json",
   "name": "$name",
   "uniq_id": "$uniq_id",
+  "time": "$publish_time",
   "val_tpl": "{{ value_json.$val_tpl }}",
   "icon": "$icon",
   "device_class": "$device_class",
-"expire_after": "$expire_after",
+  "expire_after": "$expire_after",
   "device": { $device_dict }
 }''',
     "binary_sensor": '''
@@ -142,6 +147,7 @@ json_hass = {"sensor": '''
   "stat_t": "home/$ups_id/json",
   "name": "$name",
   "uniq_id": "$uniq_id",
+  "time": "$publish_time",
   "val_tpl": "{{ value_json.$val_tpl }}",
   "device_class": "$device_class",
   "device": { $device_dict },
@@ -159,6 +165,7 @@ json_hass = {"sensor": '''
   "cmd_t":"$cmd_t",
   "icon":"$icon",
   "uniq_id": "$uniq_id",
+  "time": "$publish_time",
   "val_tpl": "$val_tpl",
   "device": { $device_dict },
   "pl_on": "$pl_on",
@@ -238,7 +245,7 @@ def substitui_secrets():
     PORTA = str2List(pegaEnv("PORTA"))
     UPS_NAME = pegaEnv("UPS_NAME")
     UPS_ID = pegaEnv("UPS_ID")
-    UPS_NAME_ID = pegaEnv("UPS_NAME_ID")
+    #UPS_NAME_ID = pegaEnv("UPS_NAME_ID")
     setaUpsNameId()
     SMSUPS_SERVER = str2bool(pegaEnv("SMSUPS_SERVER"))
     SMSUPS_CLIENTE = str2bool(pegaEnv("SMSUPS_CLIENTE"))
@@ -312,7 +319,12 @@ def get_secrets():
 
 def str2bool(v):
     '''Para evitar problemas com variaveis booleanas inportadas'''
-    return v.lower() in ("yes", "true", "t", "1", "on", "v", "ligado")
+    ret = v
+    if type(v) is bool:
+        ret = v
+    elif type(v) is str:
+        ret = v.lower() in ("yes", "true", "t", "1", "on", "v", "ligado")
+    return ret
 
 def getConfigParser():
     print ("Getting Config Parser.")
@@ -383,7 +395,8 @@ def shutdown_computer(s = 60):
     p = 'Going to shutdown in ' + str(s) + ' seconds.'
     log.info(p)
     print (p)
-    client.publish(MQTT_PUB + "/result", p)
+    #(rc, mid) = client.publish(MQTT_PUB + "/result", p)
+    (rc, mid) = publicaMqtt(MQTT_PUB + "/result", p)
     time.sleep(s)
     if sys.platform == 'win32':
         import ctypes
@@ -399,6 +412,26 @@ def shutdown_computer(s = 60):
             #ret = os.popen(command).read()
             #log.debug(': ' + str(ret))
             #print(": " + str(ret))
+
+
+def publicaMqtt(topic, payload):
+    "Publica no MQTT atual"
+    global gLastMidMqtt
+    (rc, mid) = client.publish(topic, payload)
+    gLastMidMqtt = mid
+    if rc == mqtt.MQTT_ERR_NO_CONN:
+        print ("mqtt.MQTT_ERR_NO_CONN")
+    if rc == mqtt.MQTT_ERR_SUCCESS:
+        # certo, sem erro.
+        #print ("mqtt.MQTT_ERR_SUCCESS")
+        gLastMidMqtt = mid
+    if rc == mqtt.MQTT_ERR_QUEUE_SIZE:
+        print ("mqtt.MQTT_ERR_QUEUE_SIZE")
+    if topic.find("SMS_O2")>0:
+        #TODO: Tirar isto depois
+        print ("topic: ", topic)
+    return rc, mid
+
 
 def onOff(value, ON = "on", OFF = "off"):
     ''' return a string on / off '''
@@ -423,7 +456,19 @@ def on_connect(client, userdata, flags, rc):
         client.connected_flag = True
         # Subscribing in on_connect() means that if we lose the connection and
         # reconnect then subscriptions will be renewed.
-        client.subscribe(MQTT_TOPIC)
+        if SMSUPS_SERVER and not SMSUPS_CLIENTE:
+            log.info("Subscribe Topic: " + MQTT_TOPIC)
+            print ("Subscribe Topic: " + MQTT_TOPIC)
+            client.subscribe(MQTT_TOPIC)
+        else:
+            # teste, multiplos topicos
+            MQTT_TOPICS = []
+            MQTT_TOPICS.append( (MQTT_TOPIC, 0) )
+            MQTT_TOPICS.append( (MQTT_PUB + "/json", 0) )
+            MQTT_TOPICS.append( (MQTT_PUB + "/batterylevel", 0) )
+            client.subscribe(MQTT_TOPICS)
+            log.info("Subscribe Topics: " + str(MQTT_TOPICS).strip('[]')  )
+            print ("Subscribe Topics: " + str(MQTT_TOPICS).strip('[]')  )
         # Mostra clientes
         status['time'] = datetime.today().strftime('%Y-%m-%d %H:%M:%S')
         send_clients_status()
@@ -444,6 +489,7 @@ def on_connect(client, userdata, flags, rc):
         # tratar quando for 3 e outros
 
 
+
 def send_clients_status():
     ''' send connected clients data '''
     global status
@@ -455,7 +501,8 @@ def send_clients_status():
     dadosEnviar['version'] = VERSAO
     dadosEnviar['UPS_NAME_ID'] = UPS_NAME_ID
     jsonStatus = json.dumps(dadosEnviar)
-    client.publish(mqtt_topic, jsonStatus)
+    (rc, mid) = publicaMqtt(mqtt_topic, jsonStatus)
+    return rc
 
 
 def get_ip(change_dot = False):
@@ -470,6 +517,15 @@ def get_ip(change_dot = False):
         s.close()
     if change_dot: IP=IP.replace('.','-')
     return str(IP)
+
+def on_publish(client, userdata, mid):
+    # fazer o que aqui? 
+    # fazer uma pilha para ver se foi publicado ou não
+    # aparentemente só vem aqui, se foi publicado.
+    if 1==2:
+        print("Published mid: " + str(mid), "last: " + str(gLastMidMqtt))
+        if gLastMidMqtt-1 != mid:
+            print ("Erro mid:" + str(mid) + " não publicado.")
 
 def on_disconnect(client, userdata, rc):
     global Connected
@@ -486,7 +542,7 @@ def on_disconnect(client, userdata, rc):
     try:
         send_clients_status()
     except Exception as e:
-        mostraErro(e,30,"on_disconnect")
+        mostraErro(e, 30, "on_disconnect")
 
 # The callback for when a PUBLISH message is received from the server.
 def on_message(client, userdata, msg):
@@ -500,36 +556,54 @@ def on_message(client, userdata, msg):
             res = json.loads(msg_p)
         else:
             mostraErro(e, 40, "on_message")
+            
     log.debug("on_message: " + msg.topic + " " + str(msg.payload))
+    if msg.topic == MQTT_PUB + "/batterylevel":
+        # nível bateria mudou.
+        client_bat_level = float(msg.payload.decode())
+        checkBatteryLevel2(client_bat_level, True, True)
+        return None
+    if msg.topic == MQTT_PUB + "/json":
+        # mudou o json
+        return None
+
+    if not type(res) is list:
+        # não é uma lista - sair
+        print ("Erro de Comando")
+        return None
+    if not "cmd" in res.keys():
+        # não tem o comando certo. Sair
+        print ("Comando não encontrado")
+        return None
     v=res['cmd'].upper()
     if v=='T':
         ret = send_command("Test",cmd['T'], sendQ=True)
-        client.publish(MQTT_PUB + "/result", str(ret))
+        (rc, mid) = publicaMqtt(MQTT_PUB + "/result", str(ret))
     elif v=='TN':
         val = res['val']
         if val.isnumeric():
             val = int(val)
             comando = tempo2hexCMD(val)
             ret = send_command("Test n", comando, sendQ=True)  # teste N minutes
-            client.publish(MQTT_PUB + "/result", str(ret))
+            (rc, mid) = publicaMqtt(MQTT_PUB + "/result", str(ret))
     elif v=="M":
         ret = send_command("Beep",cmd['M'], sendQ=True)
-        client.publish(MQTT_PUB + "/result", str(ret))
+        (rc, mid) = publicaMqtt(MQTT_PUB + "/result", str(ret))
     elif v=="C":
         ret = send_command("CancelShutdown",cmd['C'], sendQ=True)  # cancela shutdown ou reestore
-        client.publish(MQTT_PUB + "/result", str(ret))
+        (rc, mid) = publicaMqtt(MQTT_PUB + "/result", str(ret))
     elif v=="D":
         ret = send_command("Cancel",cmd['D'], sendQ=True)  # cancela Testes
-        client.publish(MQTT_PUB + "/result", str(ret))
+        (rc, mid) = publicaMqtt(MQTT_PUB + "/result", str(ret))
     elif v=="L":
         ret = send_command("TestLow",cmd['L'], sendQ=True)   # testa até low battery
-        client.publish(MQTT_PUB + "/result", str(ret))
+        (rc, mid) = publicaMqtt(MQTT_PUB + "/result", str(ret))
     elif v=="RAW":
         # envia comando como recebido
         ret = send_command("Raw",res['val'])
         if len(ret)>0:
             log.debug("publish: " + MQTT_PUB + "/result : " + str(ret))
-            client.publish(MQTT_PUB + "/result", str(ret))
+            (rc, mid) = publicaMqtt(MQTT_PUB + "/result", str(ret))
     elif v=="CMD":
         # envia comando e inclui checksum
         if len(res['val'])!=0:
@@ -537,11 +611,11 @@ def on_message(client, userdata, msg):
             ret = send_command("CMD", comando)
             if len(ret)>0:
                 log.debug("publish: " + MQTT_PUB + "/result : " + str(ret))
-                client.publish(MQTT_PUB + "/result", str(ret))
+                (rc, mid) = publicaMqtt(MQTT_PUB + "/result", str(ret))
                 ret = ""
         else:
             log.debug("publish: " + MQTT_PUB + "/result : Invalid command")
-            client.publish(MQTT_PUB + "/result", "Invalid command")
+            (rc, mid) = publicaMqtt(MQTT_PUB + "/result", "Invalid command")
     elif v=="SHUTDOWN":
         # call shutdonw commands
         shutdown_computer()
@@ -717,7 +791,7 @@ def montaCmd(c1):
 def publish_many(topic, dicionario):
     for key,val in dicionario.items():
         topi = topic + "/" + key
-        client.publish(topi, str(val))
+        (rc, mid) = publicaMqtt(topi, str(val))
         
 def hex2Ascii(hexa):
     res = str(hexa).replace("b'","").replace("'","")
@@ -760,7 +834,7 @@ def publicaDados(upsData):
     if ENVIA_JSON:
         upsData.update(noBreakInfo)  # junta outros dados
         jsonUPS = json.dumps(upsData)
-        client.publish(MQTT_PUB + "/json", jsonUPS)
+        (rc, mid) = publicaMqtt(MQTT_PUB + "/json", jsonUPS)
         gMqttEnviado['b'] = True
         gMqttEnviado['t'] = datetime.now()
     if ENVIA_MUITOS:
@@ -844,8 +918,18 @@ def checkBatteryLevel(upsData):
     bat = int(upsData['batterylevel'])
     if bat < UPS_BATERY_LEVEL and bat!=0:
         # bateria acabando.
-        if upsData['BateriaBaixa']=="on" or upsData['BateriaEmUso']=='on': # evita shutdown no pico de volta
-            client.publish(MQTT_PUB + "/cmd", MQTT_CMD_SHUTDOWN )
+        checkBatteryLevel2(bat, upsData['BateriaBaixa'], upsData['BateriaEmUso']  )
+        #if upsData['BateriaBaixa']=="on" or upsData['BateriaEmUso']=='on': # evita shutdown no pico de volta
+        #    client.publish(MQTT_PUB + "/cmd", MQTT_CMD_SHUTDOWN )
+
+def checkBatteryLevel2(batterylevel, bateriaBaixa, bateriaEmUso):
+    ''' Verifica o nível de bateria e chama o shutdown caso necessário '''
+    bat = batterylevel
+    if bat < UPS_BATERY_LEVEL and bat!=0:
+        # bateria acabando.
+        if str2bool(bateriaBaixa) or str2bool(bateriaEmUso): # evita shutdown no pico de volta
+            (rc, mid) = publicaMqtt(MQTT_PUB + "/cmd", MQTT_CMD_SHUTDOWN )
+
 
 def json_remove_vazio(strJson):
     ''' remove linhas / elementos vazios de uma string Json '''
@@ -870,6 +954,7 @@ def monta_publica_topico(component, sDict, varComuns):
                 dic['val_tpl']=dic['name']
             dic['name']=varComuns['uniq_id']
             dic['device_dict'] = device_dict
+            dic['publish_time'] = datetime.today().strftime('%Y-%m-%d %H:%M:%S')
             dic['expire_after'] = INTERVALO_EXPIRE # quando deve expirar
             dados = Template(json_hass[component]) # sensor
             dados = Template(dados.safe_substitute(dic))
@@ -879,7 +964,8 @@ def monta_publica_topico(component, sDict, varComuns):
             # print(topico)
             # print(dados)
             dados = json_remove_vazio(dados)
-            client.publish(topico, dados)
+            (rc, mid) = publicaMqtt(topico, dados)
+            print ("rc: ", rc)
 
 
 def send_hass():
@@ -902,7 +988,7 @@ def send_hass():
         for k in json_hass.items():
             json_file_path = k[0] + '.json'
             if IN_HASSIO:
-                json_file_path = '/' + json_file_path  # to run on RASS.IO
+                json_file_path = '/' + json_file_path  # to run on HASS.IO
             if not os.path.isfile(json_file_path):
                 log.error(json_file_path + " not found!")
             json_file = open(json_file_path)
@@ -967,9 +1053,11 @@ def mqttStart():
     client.on_connect = on_connect
     client.on_message = on_message
     client.on_disconnect = on_disconnect
+    client.on_publish = on_publish
     try:
         clientOk = True
-        client.connect(MQTT_HOST, 1883, 60)
+        rc = client.connect(MQTT_HOST, 1883, 60)
+
     except Exception as e:  # OSError
         if e.__class__.__name__ == 'OSError':
             clientOk = False
