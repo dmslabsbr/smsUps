@@ -1,6 +1,6 @@
 {
   "name": "SMS UPS BETA",
-  "version": "0.30",
+  "version": "0.32",
   "slug": "hassio_sms_ups",
   "description": "Read data from SMS BRASIL UPS",
   "arch": ["armhf", "armv7", "aarch64", "amd64", "i386"],
@@ -10,6 +10,8 @@
   "ports": {
     "8000/tcp": 8000
   },
+  "hassio_api": true,
+  "hassio_role": "manager",
   "devicetree": true,
   "devices": ["/dev/ttyUSB0", "/dev/ttyAMA0"],
   "webui": "[PROTO:use_ssl]://[HOST]:[PORT:8000]/",
@@ -25,6 +27,7 @@
     "SMSUPS_SERVER": true,
     "SMSUPS_CLIENTE": true,
     "PORTA": "/dev/ttyUSB0",
+    "allow_shutdown": true,
     "SHUTDOWN_CMD": ["sudo shutdown -h now", "sudo shutdown now", "systemctl poweroff", "sudo poweroff"],
     "USE_SECRETS": false
   },
@@ -37,6 +40,7 @@
     "SMSUPS_SERVER": "bool",
     "SMSUPS_CLIENTE": "bool",
     "PORTA": "str",
+    "allow_shutdown": "bool",
     "SHUTDOWN_CMD": "str",
     "USE_SECRETS": "bool"
   }

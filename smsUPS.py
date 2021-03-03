@@ -44,6 +44,7 @@ SMSUPS_SERVER = True
 SMSUPS_CLIENTE = True
 LOG_FILE = '/var/tmp/smsUPS.log'
 LOG_LEVEL = logging.DEBUG
+ALLOW_SHUTDOWN = True
 SHUTDOWN_CMD = '"sudo shutdown -h now", "sudo shutdown now", "systemctl poweroff", "sudo poweroff"'
 # CONFIG Device
 UPS_NAME='UPS'
@@ -51,19 +52,57 @@ UPS_ID = '01'
 UPS_NAME_ID = 'UPS_01'
 UPS_BATERY_LEVEL = 30
 
+class Color:
+    # Foreground
+    F_Default = "\x1b[39m"
+    F_Black = "\x1b[30m"
+    F_Red = "\x1b[31m"
+    F_Green = "\x1b[32m"
+    F_Yellow = "\x1b[33m"
+    F_Blue = "\x1b[34m"
+    F_Magenta = "\x1b[35m"
+    F_Cyan = "\x1b[36m"
+    F_LightGray = "\x1b[37m"
+    F_DarkGray = "\x1b[90m"
+    F_LightRed = "\x1b[91m"
+    F_LightGreen = "\x1b[92m"
+    F_LightYellow = "\x1b[93m"
+    F_LightBlue = "\x1b[94m"
+    F_LightMagenta = "\x1b[95m"
+    F_LightCyan = "\x1b[96m"
+    F_White = "\x1b[97m"
+    # Background
+    B_Default = "\x1b[49m"
+    B_Black = "\x1b[40m"
+    B_Red = "\x1b[41m"
+    B_Green = "\x1b[42m"
+    B_Yellow = "\x1b[43m"
+    B_Blue = "\x1b[44m"
+    B_Magenta = "\x1b[45m"
+    B_Cyan = "\x1b[46m"
+    B_LightGray = "\x1b[47m"
+    B_DarkGray = "\x1b[100m"
+    B_LightRed = "\x1b[101m"
+    B_LightGreen = "\x1b[102m"
+    B_LightYellow = "\x1b[103m"
+    B_LightBlue = "\x1b[104m"
+    B_LightMagenta = "\x1b[105m"
+    B_LightCyan = "\x1b[106m"
+    B_White = "\x1b[107m"
 
 # CONST
-VERSAO = '0.30'
+VERSAO = '0.32'
 CR = '0D'
 MANUFACTURER = 'dmslabs'
 VIA_DEVICE = 'smsUPS'
 NODE_ID = 'dmslabs'
 APP_NAME = 'smsUPS'
-MQTT_CMD_SHUTDOWN = '{"cmd": "SHUTDOWN","val": ""}'
+MQTT_CMD_SHUTDOWN = '{"cmd": "SHUTDOWN","val": "$publish_time"}'
 UUID = str(uuid.uuid1())
 INTERVALO_EXPIRE = int(INTERVALO_MQTT * INTERVALO_SERIAL)
 DEFAULT_MQTT_PASS = "mqtt_pass"
 USE_SECRETS = True
+SHUTDOWN_CMD_HASS = 'echo `curl -s -X POST -H "Authorization: Bearer $SUPERVISOR_TOKEN" "http://hassio/host/shutdown"`'
 
 respostaH = [None] * 18
 
@@ -235,6 +274,7 @@ def substitui_secrets():
     global MQTT_PUB
     global SMSUPS_SERVER
     global SMSUPS_CLIENTE
+    global ALLOW_SHUTDOWN
     global SHUTDOWN_CMD
     global USE_SECRETS
 
@@ -249,6 +289,7 @@ def substitui_secrets():
     setaUpsNameId()
     SMSUPS_SERVER = str2bool(pegaEnv("SMSUPS_SERVER"))
     SMSUPS_CLIENTE = str2bool(pegaEnv("SMSUPS_CLIENTE"))
+    ALLOW_SHUTDOWN = str2bool(pegaEnv("allow_shutdown"))
     SHUTDOWN_CMD = pegaEnv("SHUTDOWN_CMD")
     SHUTDOWN_CMD = str2List(SHUTDOWN_CMD)
     USE_SECRETS = str2bool(pegaEnv("USE_SECRETS"))
@@ -279,6 +320,7 @@ def get_secrets():
     global SMSUPS_CLIENTE
     global LOG_FILE
     global LOG_LEVEL
+    global ALLOW_SHUTDOWN
     global SHUTDOWN_CMD
     global SECRETS
 
@@ -313,6 +355,7 @@ def get_secrets():
     SMSUPS_CLIENTE = get_config(config, 'config', 'SMSUPS_CLIENTE', SMSUPS_CLIENTE, getBool=True)
     LOG_FILE = get_config(config, 'config', 'LOG_FILE', LOG_FILE)
     LOG_LEVEL = get_config(config, 'config', 'LOG_LEVEL', LOG_LEVEL, getInt=True)
+    ALLOW_SHUTDOWN = get_config(config, 'config', 'ALLOW_SHUTDOWN', SMSUPS_CLIENTE, getBool=True)
     SHUTDOWN_CMD = get_config(config, 'config', 'SHUTDOWN_CMD', SHUTDOWN_CMD, split = True)
 
     if ENVIA_HASS: ENVIA_JSON = True
@@ -334,7 +377,7 @@ def getConfigParser():
         print ("Existe " +  SECRETS)
     else:
         log.warning("Não existe " + SECRETS)
-        print ("Não existe " +  SECRETS)
+        print (Color.F_Magenta, "Não existe " +  SECRETS, Color.F_Default)
         # SECRETS = "/" + SECRETS # tenta arrumar para o HASS.IO
         # O ideal é o SECRETS ficar no data, para não perder a cada iniciada.
 
@@ -386,28 +429,44 @@ def receive_signal(signum, stack):
     log.debug('sinal' + str(signum))
 
 def shutdown_computer(s = 60):
+    global status
     ''' try to shutdown the computer '''
-    log.warning('tring to shutdown the computer')
+    log.warning('Trying to shutdown the computer...')
+    print (Color.F_Red, 'Trying to shutdown the computer...', Color.F_Default)
     import sys
     p = 'sys.platform: ' + sys.platform
     print (p)
     log.info(p)
+    if not ALLOW_SHUTDOWN:
+        p = "shutdown not allowed in this machine"
+        print (Color.F_Green, p, Color.F_Default)
+        log.warning (p)
+        return
     p = 'Going to shutdown in ' + str(s) + ' seconds.'
     log.info(p)
     print (p)
     #(rc, mid) = client.publish(MQTT_PUB + "/result", p)
     (rc, mid) = publicaMqtt(MQTT_PUB + "/result", p)
-    time.sleep(s)
+    status['ups'] = "Shutdown"
+    status['smsUPS'] = "off"
+    status['time'] = datetime.today().strftime('%Y-%m-%d %H:%M:%S')
+    send_clients_status()
+    new_SHUTDOWN_CMD = SHUTDOWN_CMD.copy()
+    if IN_HASSIO:
+        # inside docker hass, you need anothen command
+        new_SHUTDOWN_CMD.insert(0, SHUTDOWN_CMD_HASS)
     if sys.platform == 'win32':
         import ctypes
+        time.sleep(s)
         user32 = ctypes.WinDLL('user32')
         user32.ExitWindowsEx(0x00000008, 0x00000000)
     else:
         import os
-        for i in range(len(SHUTDOWN_CMD)):
-            command = SHUTDOWN_CMD[i]  # trying many commands
+        time.sleep(s)
+        for i in range(len(new_SHUTDOWN_CMD)): # SHUTDOWN_CMD
+            command = new_SHUTDOWN_CMD[i]  # trying many commands - SHUTDOWN_CMD[i]
             log.info('* Trying...' + command)
-            print('* Trying...' + command)
+            print('* Trying...', Color.F_Blue, command, Color.F_Default)
             os.system(command) # 'sudo shutdown now'
             #ret = os.popen(command).read()
             #log.debug(': ' + str(ret))
@@ -463,9 +522,12 @@ def on_connect(client, userdata, flags, rc):
         else:
             # teste, multiplos topicos
             MQTT_TOPICS = []
-            MQTT_TOPICS.append( (MQTT_TOPIC, 0) )
+            MQTT_TOPICS.append( (MQTT_TOPIC, 0) )  #TODO ver se vai ficar
+            MQTT_TOPICS.append( (MQTT_PUB + "/cmd", 0) )
             MQTT_TOPICS.append( (MQTT_PUB + "/json", 0) )
             MQTT_TOPICS.append( (MQTT_PUB + "/batterylevel", 0) )
+            MQTT_TOPICS.append( (MQTT_PUB + "/BateriaBaixa", 0) )
+            MQTT_TOPICS.append( (MQTT_PUB + "/BateriaEmUso", 0) )
             client.subscribe(MQTT_TOPICS)
             log.info("Subscribe Topics: " + str(MQTT_TOPICS).strip('[]')  )
             print ("Subscribe Topics: " + str(MQTT_TOPICS).strip('[]')  )
@@ -500,6 +562,10 @@ def send_clients_status():
     # dadosEnviar['time'] = datetime.today().strftime('%Y-%m-%d %H:%M:%S')
     dadosEnviar['version'] = VERSAO
     dadosEnviar['UPS_NAME_ID'] = UPS_NAME_ID
+    dadosEnviar['server'] = onOff(SMSUPS_SERVER)
+    dadosEnviar['client'] = onOff(SMSUPS_CLIENTE)
+    dadosEnviar['inHass'] = IN_HASSIO
+    dadosEnviar['ALLOW_SHUTDOWN'] = ALLOW_SHUTDOWN
     jsonStatus = json.dumps(dadosEnviar)
     (rc, mid) = publicaMqtt(mqtt_topic, jsonStatus)
     return rc
@@ -546,6 +612,7 @@ def on_disconnect(client, userdata, rc):
 
 # The callback for when a PUBLISH message is received from the server.
 def on_message(client, userdata, msg):
+    global gNoBreakLast
     try:
         res = json.loads(msg.payload)
     except Exception as e:
@@ -553,27 +620,62 @@ def on_message(client, userdata, msg):
             msg_p = msg.payload
             msg_p = msg_p.decode()
             msg_p = msg_p.replace("'",'"')
-            res = json.loads(msg_p)
+            #res = json.loads(msg_p)
+            res = msg_p
         else:
             mostraErro(e, 40, "on_message")
-            
+
     log.debug("on_message: " + msg.topic + " " + str(msg.payload))
+    soCliente = SMSUPS_CLIENTE and not SMSUPS_SERVER
+    if msg.topic == MQTT_PUB + "/BateriaEmUso":
+        if soCliente:
+            BateriaEmUso = msg.payload.decode()
+            gNoBreakLast['BateriaEmUso'] = str2bool(BateriaEmUso)
+        return None
+    if msg.topic == MQTT_PUB + "/BateriaBaixa":
+        if soCliente:
+            BateriaBaixa = msg.payload.decode()
+            gNoBreakLast['BateriaBaixa'] = str2bool(BateriaBaixa)
+        return None
+
     if msg.topic == MQTT_PUB + "/batterylevel":
         # nível bateria mudou.
         client_bat_level = float(msg.payload.decode())
-        checkBatteryLevel2(client_bat_level, True, True)
+
+        BateriaBaixa = gNoBreakLast['BateriaBaixa']
+        BateriaEmUso = gNoBreakLast['BateriaEmUso']
+
+        # TODO só teste
+        BateriaBaixa = True
+        BateriaEmUso = True
+
+        checkBatteryLevel2(client_bat_level, BateriaBaixa, BateriaBaixa)
         return None
     if msg.topic == MQTT_PUB + "/json":
         # mudou o json
+        if SMSUPS_CLIENTE and not SMSUPS_SERVER:
+            # guarda as informações
+            gNoBreakLast = res.copy()
+
+        client_bat_level = float(res.get('batterylevel'))
+        BateriaBaixa = res.get('BateriaBaixa')
+        BateriaEmUso = res.get('BateriaEmUso')
+        checkBatteryLevel2(client_bat_level, BateriaBaixa, BateriaEmUso)
+        if soCliente:
+            # seta os dados de bateria
+            gNoBreakLast['BateriaBaixa'] = str2bool(BateriaBaixa)
+            gNoBreakLast['BateriaEmUso'] = str2bool(BateriaEmUso)
         return None
 
-    if not type(res) is list:
+    if not type(res) is list and not type(res) is dict:
         # não é uma lista - sair
-        print ("Erro de Comando")
+        print ("Erro de Comando - é um " + str(type(res)) + " " + str(res) )
+        log.warning ("Erro de Comando - é um " + str(type(res)) + str(res) )
         return None
     if not "cmd" in res.keys():
         # não tem o comando certo. Sair
-        print ("Comando não encontrado")
+        print ("Comando cmd não encontrado")
+        log.warning ("Comando cmd não encontrad")
         return None
     v=res['cmd'].upper()
     if v=='T':
@@ -619,6 +721,9 @@ def on_message(client, userdata, msg):
     elif v=="SHUTDOWN":
         # call shutdonw commands
         shutdown_computer()
+        log.warning ( " I can't shutdown the computer" )
+        print(Color.F_Cyan, " I can't shutdown the computer", Color.F_Default )
+        return False
     
     if len(ret)>5:
         queryQ(ret)
@@ -927,8 +1032,16 @@ def checkBatteryLevel2(batterylevel, bateriaBaixa, bateriaEmUso):
     bat = batterylevel
     if bat < UPS_BATERY_LEVEL and bat!=0:
         # bateria acabando.
+        log.warning ("Battery low " + str(bat) + "%")
+        print (Color.B_Red, Color.F_White, "Battery low " + str(bat) + "%", Color.B_Default, Color.F_Default)
         if str2bool(bateriaBaixa) or str2bool(bateriaEmUso): # evita shutdown no pico de volta
-            (rc, mid) = publicaMqtt(MQTT_PUB + "/cmd", MQTT_CMD_SHUTDOWN )
+            log.warning ("Sending shutdown command")
+            print ("Sending shutdown command")
+            # TODO colocar o horario
+            #mqqt_cmd_copy = MQTT_CMD_SHUTDOWN
+            #mqqt_cmd_copy['publish_time'] = datetime.today().strftime('%Y-%m-%d %H:%M:%S')
+            #(rc, mid) = publicaMqtt(MQTT_PUB + "/cmd", mqqt_cmd_copy ) # MQTT_CMD_SHUTDOWN
+            (rc, mid) = publicaMqtt(MQTT_PUB + "/cmd", MQTT_CMD_SHUTDOWN ) # 
 
 
 def json_remove_vazio(strJson):
@@ -965,7 +1078,7 @@ def monta_publica_topico(component, sDict, varComuns):
             # print(dados)
             dados = json_remove_vazio(dados)
             (rc, mid) = publicaMqtt(topico, dados)
-            print ("rc: ", rc)
+            # print ("rc: ", rc)
 
 
 def send_hass():
@@ -1025,7 +1138,7 @@ def abre_serial():
         status['serial'] = "open"
     except Exception as e:
         if e.__class__.__name__ == 'SerialException':
-            print ("I was unable to open the serial port ", porta_ser)
+            print (Color.F_Red + "I was unable to open the serial port ", porta_ser, Color.F_Default)
             log.warning ("I was unable to open the serial port " + porta_ser) 
         else:
             mostraErro(e, 40, "AbreSerial")
@@ -1062,7 +1175,7 @@ def mqttStart():
         if e.__class__.__name__ == 'OSError':
             clientOk = False
             log.warning("Can't start MQTT")
-            print ("Can't start MQTT")  # e.errno = 51 -  'Network is unreachable'
+            print (Color.F_Red + "Can't start MQTT" + Color.F_Default)  # e.errno = 51 -  'Network is unreachable'
             mostraErro(e,20, "MQTT Start")
         else:
             clientOk = False
@@ -1104,8 +1217,8 @@ def iniciaLogger():
 
 # APP START - Inicio
 
-print ("********** SMS UPS v." + VERSAO)
-print ("Starting up... " + datetime.today().strftime('%Y-%m-%d %H:%M:%S'))
+print (Color.B_Blue + "********** SMS UPS v." + VERSAO + Color.B_Default)
+print (Color.B_Green + "Starting up... " + datetime.today().strftime('%Y-%m-%d %H:%M:%S') + Color.B_Default)
 
 # hass.io token
 IN_HASSIO = ( pegaEnv('HASSIO_TOKEN') != "" and PATH_ROOT == "/data")
@@ -1145,7 +1258,7 @@ if IN_HASSIO:
         get_secrets()
     if DEFAULT_MQTT_PASS == MQTT_PASSWORD:
         log.warning ("YOU SHOUD CHANGE DE DEFAULT MQTT PASSWORD!")
-        print ("YOU SHOUD CHANGE DE DEFAULT MQTT PASSWORD!")
+        print (Color.F_Red + "YOU SHOUD CHANGE DE DEFAULT MQTT PASSWORD!" + Color.F_Default)
 
     log.debug("SMSUPS_SERVER: " + str(SMSUPS_SERVER))
     log.debug("SMSUPS_CLIENTE: " + str(SMSUPS_CLIENTE))
