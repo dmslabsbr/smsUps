@@ -17,6 +17,7 @@ export SMSUPS_SERVER=$(jq --raw-output '.SMSUPS_SERVER' $CONFIG_PATH)
 export UPS_NAME=$(jq --raw-output '.UPS_NAME' $CONFIG_PATH)
 export UPS_ID=$(jq --raw-output '.UPS_ID' $CONFIG_PATH)
 export USE_SECRETS=$(jq --raw-output '.USE_SECRETS' $CONFIG_PATH)
+export allow_shutdown=$(jq --raw-output '.allow_shutdown' $CONFIG_PATH)
 
 
 bashio::log.info "PATH: "
