@@ -91,7 +91,7 @@ class Color:
     B_White = "\x1b[107m"
 
 # CONST
-VERSAO = '0.32'
+VERSAO = '0.33'
 CR = '0D'
 MANUFACTURER = 'dmslabs'
 VIA_DEVICE = 'smsUPS'
@@ -103,6 +103,7 @@ INTERVALO_EXPIRE = int(INTERVALO_MQTT * INTERVALO_SERIAL)
 DEFAULT_MQTT_PASS = "mqtt_pass"
 USE_SECRETS = True
 SHUTDOWN_CMD_HASS = 'echo `curl -s -X POST -H "Authorization: Bearer $SUPERVISOR_TOKEN" "http://hassio/host/shutdown"`'
+SHUTDOWN_CMD_DARWIN = ''
 
 respostaH = [None] * 18
 
@@ -174,7 +175,6 @@ json_hass = {"sensor": '''
   "stat_t": "home/$ups_id/json",
   "name": "$name",
   "uniq_id": "$uniq_id",
-  "time": "$publish_time",
   "val_tpl": "{{ value_json.$val_tpl }}",
   "icon": "$icon",
   "device_class": "$device_class",
@@ -186,7 +186,6 @@ json_hass = {"sensor": '''
   "stat_t": "home/$ups_id/json",
   "name": "$name",
   "uniq_id": "$uniq_id",
-  "time": "$publish_time",
   "val_tpl": "{{ value_json.$val_tpl }}",
   "device_class": "$device_class",
   "device": { $device_dict },
@@ -204,7 +203,6 @@ json_hass = {"sensor": '''
   "cmd_t":"$cmd_t",
   "icon":"$icon",
   "uniq_id": "$uniq_id",
-  "time": "$publish_time",
   "val_tpl": "$val_tpl",
   "device": { $device_dict },
   "pl_on": "$pl_on",
@@ -826,7 +824,7 @@ def dadosNoBreak(lista):
         lista[7] = "0"
         lista[8] = "FF"
         lista[9] = "FF"
-    noBreak['time'] = datetime.today().strftime('%Y-%m-%d %H:%M:%S'),
+    noBreak['time'] = datetime.today().strftime('%Y-%m-%d %H:%M:%S')
     noBreak['lastinputVac'] = toINT16(lista[1])/10
     noBreak['inputVac'] = toINT16(lista[2])/10
     noBreak['outputVac'] = toINT16(lista[3])/10
@@ -1047,12 +1045,19 @@ def checkBatteryLevel2(batterylevel, bateriaBaixa, bateriaEmUso):
 def json_remove_vazio(strJson):
     ''' remove linhas / elementos vazios de uma string Json '''
     strJson.replace("\n","")
-    dados = json.loads(strJson)  # converte string para dict
+    try:
+        dados = json.loads(strJson)  # converte string para dict
+    except Exception as e:
+        if e.__class__.__name__ == 'JSONDecodeError':
+            log.warning ("erro json.load: " + strJson)
+        else:
+            mostraErro(e, 40, "on_message")
     cp_dados = json.loads(strJson) # cria uma copia
     for k,v in dados.items():
         if len(v) == 0:
             cp_dados.pop(k)  # remove vazio
     return json.dumps(cp_dados) # converte dict para json
+
 
 def monta_publica_topico(component, sDict, varComuns):
     ''' monta e envia topico '''
@@ -1260,24 +1265,18 @@ if IN_HASSIO:
         log.warning ("YOU SHOUD CHANGE DE DEFAULT MQTT PASSWORD!")
         print (Color.F_Red + "YOU SHOUD CHANGE DE DEFAULT MQTT PASSWORD!" + Color.F_Default)
 
-    log.debug("SMSUPS_SERVER: " + str(SMSUPS_SERVER))
-    log.debug("SMSUPS_CLIENTE: " + str(SMSUPS_CLIENTE))
-    log.debug("MQTT_HOST: " + str(MQTT_HOST))
-    log.debug("IP: " + status['ip'])
-    print ("SMSUPS_SERVER: " + str(SMSUPS_SERVER))
-    print ("SMSUPS_CLIENTE: " + str(SMSUPS_CLIENTE))
-    print ("IP: " + status['ip'])
-
 log.debug("SMSUPS_SERVER: " + str(SMSUPS_SERVER))
 log.debug("SMSUPS_CLIENTE: " + str(SMSUPS_CLIENTE))
-log.debug("IP: " + status['ip'])
 log.debug("MQTT_HOST: " + str(MQTT_HOST))
-log.debug("MQTT_PASSWORD: " + str(MQTT_PASSWORD))
-if (SMSUPS_SERVER):
-    log.debug("SMSUPS_SERVER: TRUE")
-print ("SMSUPS_SERVER: " + str(SMSUPS_SERVER))
-print ("SMSUPS_CLIENTE: " + str(SMSUPS_CLIENTE))
-print ("IP: " + status['ip'])
+log.debug("IP: " + status['ip'])
+print ("SMSUPS_SERVER: " + Color.B_Green + str(SMSUPS_SERVER) + Color.B_Default)
+print ("SMSUPS_CLIENTE: " + Color.B_Green + str(SMSUPS_CLIENTE) + Color.B_Default)
+print ("IP: " + Color.F_Magenta + status['ip'] + Color.F_Default)
+print ("UPS_ID: " + Color.B_LightYellow + str(UPS_ID) + Color.B_Default)
+print ("UPS_NAME: " + Color.B_LightYellow + str(UPS_NAME) + Color.B_Default)
+print ("UPS_NAME_ID: " + Color.B_LightYellow + str(UPS_NAME_ID) + Color.B_Default)
+
+
 
 # info
 try:
@@ -1307,10 +1306,8 @@ serialOk = False
 if not serialOk:
     if SMSUPS_SERVER: serialOk = abre_serial()
 
-
 # Time entre a conexao serial e o tempo para escrever (enviar algo)
 time.sleep(1.8) # Entre 1.5s a 2s
-
 
 if SMSUPS_SERVER:
     getNoBreakInfo()
