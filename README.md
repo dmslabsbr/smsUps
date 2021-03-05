@@ -94,7 +94,7 @@ sudo launchctl list | grep smsUPS
 sudo rm /var/tmp/smsUPS.*
 ```
 
-## Commands
+## 2 - Commands
 
 * Send json string by **MQTT** to **/home/ups/cmd**
 
@@ -173,7 +173,7 @@ sudo rm /var/tmp/smsUPS.*
    }
 ```
 
-## CONFIG
+## 3 - CONFIG
 
 You should create your own **secrets.ini** file. Like this:
 
@@ -217,9 +217,12 @@ Put this in your configuration file.
 osascript -e 'tell app "System Events" to shut down'
 ```
 
-## Rasbian reload
+## 4 - Reload after config changes.
 
-Reload the configuration after config file changes.
+You must reload the configuration after config file changes.
+
+### a) Raspiberry OS or other Linux OS
+
 
 ```bash
 sudo systemctl stop smsUPS.service
@@ -231,7 +234,29 @@ sudo systemctl start smsUPS.service
 sudo systemctl status smsUPS.service
 ```
 
+### b) OSX - iMac
 
+* run as current user
+
+```bash
+launchctl stop dmslabs.python.smsUPS
+launchctl start dmslabs.python.smsUPS
+launchctl unload dmslabs.python.smsUPS
+launchctl load ~/Library/LaunchAgents/smsUPS_laucher.plist
+launchctl start dmslabs.python.smsUPS
+launchctl list | grep smsUPS
+```
+
+* run as root
+
+```bash
+sudo launchctl stop dmslabs.python.smsUPS
+sudo launchctl start dmslabs.python.smsUPS
+sudo launchctl unload dmslabs.python.smsUPS
+launchctl load ~/Library/LaunchAgents/smsUPS_laucher.plist
+launchctl start dmslabs.python.smsUPS
+launchctl list | grep smsUPS
+```
 
 
 ###  Other things:

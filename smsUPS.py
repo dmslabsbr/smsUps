@@ -51,6 +51,7 @@ UPS_NAME='UPS'
 UPS_ID = '01'
 UPS_NAME_ID = 'UPS_01'
 UPS_BATERY_LEVEL = 30
+UPS_INPUT_VAC = 50
 
 class Color:
     # Foreground
@@ -91,7 +92,7 @@ class Color:
     B_White = "\x1b[107m"
 
 # CONST
-VERSAO = '0.33'
+VERSAO = '0.34'
 CR = '0D'
 MANUFACTURER = 'dmslabs'
 VIA_DEVICE = 'smsUPS'
@@ -156,7 +157,7 @@ noBreak = {'lastinputVac':0,
     'ByPass': False,
     'BateriaBaixa': False,
     'BateriaEmUso': False,
-    'time': "",
+    'publish_time': "",
     'info': "",
     'name': ''}
 
@@ -200,7 +201,7 @@ json_hass = {"sensor": '''
 { 
   "stat_t": "home/$ups_id/json",
   "name": "$name",
-  "cmd_t":"$cmd_t",
+  "cmd_t":"home/$ups_id/cmd",
   "icon":"$icon",
   "uniq_id": "$uniq_id",
   "val_tpl": "$val_tpl",
@@ -447,7 +448,7 @@ def shutdown_computer(s = 60):
     (rc, mid) = publicaMqtt(MQTT_PUB + "/result", p)
     status['ups'] = "Shutdown"
     status['smsUPS'] = "off"
-    status['time'] = datetime.today().strftime('%Y-%m-%d %H:%M:%S')
+    status['publish_time'] = datetime.today().strftime('%Y-%m-%d %H:%M:%S')
     send_clients_status()
     new_SHUTDOWN_CMD = SHUTDOWN_CMD.copy()
     if IN_HASSIO:
@@ -475,6 +476,8 @@ def publicaMqtt(topic, payload):
     "Publica no MQTT atual"
     global gLastMidMqtt
     (rc, mid) = client.publish(topic, payload)
+    print (Color.F_Cyan, topic, Color.F_Default)
+    print (Color.F_Blue, payload, Color.F_Default)
     gLastMidMqtt = mid
     if rc == mqtt.MQTT_ERR_NO_CONN:
         print ("mqtt.MQTT_ERR_NO_CONN")
@@ -484,9 +487,6 @@ def publicaMqtt(topic, payload):
         gLastMidMqtt = mid
     if rc == mqtt.MQTT_ERR_QUEUE_SIZE:
         print ("mqtt.MQTT_ERR_QUEUE_SIZE")
-    if topic.find("SMS_O2")>0:
-        #TODO: Tirar isto depois
-        print ("topic: ", topic)
     return rc, mid
 
 
@@ -530,7 +530,7 @@ def on_connect(client, userdata, flags, rc):
             log.info("Subscribe Topics: " + str(MQTT_TOPICS).strip('[]')  )
             print ("Subscribe Topics: " + str(MQTT_TOPICS).strip('[]')  )
         # Mostra clientes
-        status['time'] = datetime.today().strftime('%Y-%m-%d %H:%M:%S')
+        status['publish_time'] = datetime.today().strftime('%Y-%m-%d %H:%M:%S')
         send_clients_status()
     else:
         tp_c = {0: "Connection successful",
@@ -623,7 +623,7 @@ def on_message(client, userdata, msg):
         else:
             mostraErro(e, 40, "on_message")
 
-    log.debug("on_message: " + msg.topic + " " + str(msg.payload))
+    # log.debug("on_message: " + msg.topic + " " + str(msg.payload))
     soCliente = SMSUPS_CLIENTE and not SMSUPS_SERVER
     if msg.topic == MQTT_PUB + "/BateriaEmUso":
         if soCliente:
@@ -635,6 +635,11 @@ def on_message(client, userdata, msg):
             BateriaBaixa = msg.payload.decode()
             gNoBreakLast['BateriaBaixa'] = str2bool(BateriaBaixa)
         return None
+    if msg.topic == MQTT_PUB + "/inputVac":
+        if soCliente:
+            inputVac = msg.payload.decode()
+            gNoBreakLast['inputVac'] = int(inputVac)
+        return None
 
     if msg.topic == MQTT_PUB + "/batterylevel":
         # nível bateria mudou.
@@ -642,12 +647,9 @@ def on_message(client, userdata, msg):
 
         BateriaBaixa = gNoBreakLast['BateriaBaixa']
         BateriaEmUso = gNoBreakLast['BateriaEmUso']
+        inputVac = int( gNoBreakLast['inputVac'] )
 
-        # TODO só teste
-        BateriaBaixa = True
-        BateriaEmUso = True
-
-        checkBatteryLevel2(client_bat_level, BateriaBaixa, BateriaBaixa)
+        checkBatteryLevel2(client_bat_level, BateriaBaixa, BateriaBaixa, inputVac)
         return None
     if msg.topic == MQTT_PUB + "/json":
         # mudou o json
@@ -658,18 +660,24 @@ def on_message(client, userdata, msg):
         client_bat_level = float(res.get('batterylevel'))
         BateriaBaixa = res.get('BateriaBaixa')
         BateriaEmUso = res.get('BateriaEmUso')
-        checkBatteryLevel2(client_bat_level, BateriaBaixa, BateriaEmUso)
+        inputVac = int( res.get('inputVac') )
+        checkBatteryLevel2(client_bat_level, BateriaBaixa, BateriaEmUso, inputVac)
         if soCliente:
             # seta os dados de bateria
             gNoBreakLast['BateriaBaixa'] = str2bool(BateriaBaixa)
             gNoBreakLast['BateriaEmUso'] = str2bool(BateriaEmUso)
+            gNoBreakLast['inputVac'] = inputVac
         return None
 
     if not type(res) is list and not type(res) is dict:
         # não é uma lista - sair
-        print ("Erro de Comando - é um " + str(type(res)) + " " + str(res) )
-        log.warning ("Erro de Comando - é um " + str(type(res)) + str(res) )
-        return None
+        if str(res).upper().find('CMD') == -1:
+            print ("Erro de Comando - é um " + str(type(res)) + " " + str(res) )
+            log.warning ("Erro de Comando - é um " + str(type(res)) + str(res) )
+            return None
+        elif type(res) is str:
+            res = json.loads(res)
+
     if not "cmd" in res.keys():
         # não tem o comando certo. Sair
         print ("Comando cmd não encontrado")
@@ -824,7 +832,7 @@ def dadosNoBreak(lista):
         lista[7] = "0"
         lista[8] = "FF"
         lista[9] = "FF"
-    noBreak['time'] = datetime.today().strftime('%Y-%m-%d %H:%M:%S')
+    noBreak['publish_time'] = datetime.today().strftime('%Y-%m-%d %H:%M:%S')
     noBreak['lastinputVac'] = toINT16(lista[1])/10
     noBreak['inputVac'] = toINT16(lista[2])/10
     noBreak['outputVac'] = toINT16(lista[3])/10
@@ -894,6 +902,10 @@ def montaCmd(c1):
 def publish_many(topic, dicionario):
     for key,val in dicionario.items():
         topi = topic + "/" + key
+        #if key == "time" or key == 'publish_time':
+        #    print (Color.B_LightGray, topi, Color.B_Default)
+        #    print (Color.F_LightRed, val, Color.F_Default)
+        #    print (Color.F_LightRed, str(val), Color.F_Default)
         (rc, mid) = publicaMqtt(topi, str(val))
         
 def hex2Ascii(hexa):
@@ -979,7 +991,7 @@ def queryQ(raw = ""):
         log.debug('x: ' + str(x))
         log.debug('deu erro queryQ')
         exit()
-    if gNoBreakLast['time'] == '': gNoBreakLast = upsData.copy()
+    if gNoBreakLast['publish_time'] == '': gNoBreakLast = upsData.copy()
     if False: # ECHO
         print ('---------')
         print (x)
@@ -1021,25 +1033,27 @@ def checkBatteryLevel(upsData):
     bat = int(upsData['batterylevel'])
     if bat < UPS_BATERY_LEVEL and bat!=0:
         # bateria acabando.
-        checkBatteryLevel2(bat, upsData['BateriaBaixa'], upsData['BateriaEmUso']  )
+        checkBatteryLevel2(bat, upsData['BateriaBaixa'], upsData['BateriaEmUso'], int(upsData['inputVac']) )
         #if upsData['BateriaBaixa']=="on" or upsData['BateriaEmUso']=='on': # evita shutdown no pico de volta
         #    client.publish(MQTT_PUB + "/cmd", MQTT_CMD_SHUTDOWN )
 
-def checkBatteryLevel2(batterylevel, bateriaBaixa, bateriaEmUso):
+def checkBatteryLevel2(batterylevel, bateriaBaixa, bateriaEmUso, inputVac):
     ''' Verifica o nível de bateria e chama o shutdown caso necessário '''
     bat = batterylevel
     if bat < UPS_BATERY_LEVEL and bat!=0:
         # bateria acabando.
         log.warning ("Battery low " + str(bat) + "%")
+        log.warning ("Input Vac " + str(inputVac) )
         print (Color.B_Red, Color.F_White, "Battery low " + str(bat) + "%", Color.B_Default, Color.F_Default)
         if str2bool(bateriaBaixa) or str2bool(bateriaEmUso): # evita shutdown no pico de volta
-            log.warning ("Sending shutdown command")
-            print ("Sending shutdown command")
-            # TODO colocar o horario
-            #mqqt_cmd_copy = MQTT_CMD_SHUTDOWN
-            #mqqt_cmd_copy['publish_time'] = datetime.today().strftime('%Y-%m-%d %H:%M:%S')
-            #(rc, mid) = publicaMqtt(MQTT_PUB + "/cmd", mqqt_cmd_copy ) # MQTT_CMD_SHUTDOWN
-            (rc, mid) = publicaMqtt(MQTT_PUB + "/cmd", MQTT_CMD_SHUTDOWN ) # 
+            if inputVac < UPS_INPUT_VAC:
+                log.warning ("Sending shutdown command")
+                print ("Sending shutdown command")
+                # TODO colocar o horario
+                #mqqt_cmd_copy = MQTT_CMD_SHUTDOWN
+                #mqqt_cmd_copy['publish_time'] = datetime.today().strftime('%Y-%m-%d %H:%M:%S')
+                #(rc, mid) = publicaMqtt(MQTT_PUB + "/cmd", mqqt_cmd_copy ) # MQTT_CMD_SHUTDOWN
+                (rc, mid) = publicaMqtt(MQTT_PUB + "/cmd", MQTT_CMD_SHUTDOWN ) # 
 
 
 def json_remove_vazio(strJson):
@@ -1069,8 +1083,8 @@ def monta_publica_topico(component, sDict, varComuns):
         if key[:1] != '#':
             varComuns['uniq_id']=varComuns['identifiers'] + "_" + key
             if not('val_tpl' in dic):
-                dic['val_tpl']=dic['name']
-            dic['name']=varComuns['uniq_id']
+                dic['val_tpl'] = dic['name']
+            dic['name'] = varComuns['uniq_id']
             dic['device_dict'] = device_dict
             dic['publish_time'] = datetime.today().strftime('%Y-%m-%d %H:%M:%S')
             dic['expire_after'] = INTERVALO_EXPIRE # quando deve expirar
