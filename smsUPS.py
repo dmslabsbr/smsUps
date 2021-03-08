@@ -104,7 +104,7 @@ class Color:
     B_White = "\x1b[107m"
 
 # CONST
-VERSAO = '0.36'
+VERSAO = '0.37'
 CR = '0D'
 MANUFACTURER = 'dmslabs'
 VIA_DEVICE = 'smsUPS'
@@ -389,7 +389,10 @@ def get_secrets():
     LOG_FILE = get_config(config, 'config', 'LOG_FILE', LOG_FILE)
     LOG_LEVEL = get_config(config, 'config', 'LOG_LEVEL', LOG_LEVEL, getInt=True)
     ALLOW_SHUTDOWN = get_config(config, 'config', 'ALLOW_SHUTDOWN', SMSUPS_CLIENTE, getBool=True)
-    DEVELOPERS_MODE = get_config(config, 'config', 'DEVELOPERS_MODE', SMSUPS_CLIENTE, getBool=True)
+    DEVELOPERS_MODE = get_config(config = config, topic = 'config',
+        key = 'DEVELOPERS_MODE',
+        default = DEVELOPERS_MODE,
+        getBool=True)
     SHUTDOWN_CMD = get_config(config, 'config', 'SHUTDOWN_CMD', SHUTDOWN_CMD, split = True)
 
     if ENVIA_HASS: ENVIA_JSON = True
@@ -1378,7 +1381,11 @@ log.debug ("PORTA secrets: " + ''.join(PORTA))
 
 # Pega dados do hass, se estiver nele.
 
+if DEVELOPERS_MODE:
+    print (Color.B_Red, "DEVELOPERS_MODE", Color.B_Default)
+
 if IN_HASSIO:
+    print (Color.B_Blue, "IN HASS.IO", Color.B_Default)
     substitui_secrets()
     log.debug ("PORTA substitui: " + ''.join(PORTA))
     if USE_SECRETS:
