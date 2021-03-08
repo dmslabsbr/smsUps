@@ -18,17 +18,15 @@ export UPS_NAME=$(jq --raw-output '.UPS_NAME' $CONFIG_PATH)
 export UPS_ID=$(jq --raw-output '.UPS_ID' $CONFIG_PATH)
 export USE_SECRETS=$(jq --raw-output '.USE_SECRETS' $CONFIG_PATH)
 export allow_shutdown=$(jq --raw-output '.allow_shutdown' $CONFIG_PATH)
+export Long_lived_access_token=$(jq --raw-output '.Long_lived_access_token' $CONFIG_PATH)
 
 
-bashio::log.info "PATH: "
+bashio::log.blue "PATH: "
 pwd
 
 bashio::log.green MQTT_HOST - $MQTT_HOST
 bashio::log.green MQTT_PASS - $MQTT_PASS
 
-
-
-bashio::log.info "secrets.ini exists?"
 
 if [ -e "secrets.ini" ]; then
     bashio::log.info "secrets.ini exists!"
