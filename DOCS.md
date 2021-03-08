@@ -30,10 +30,14 @@
 - SMSUPS_CLIENTE, set it as true for the add-on to monitor the MQTT server and shut down the machine if necessary.
  
 - PORTA, standard USB device port, usually **/dev/ttyUSB0**
- 
+
+- Allow_shutdown, Automatic shutdown the host when battery level drop by 30%.
+
 - SHUTDOWN_CMD, commands used to shutdown the equipment. As there are differences between the systems, the add-on will try several options.
 
 - USE_SECRETS, setting it to **false**, the add-on will use this setting, if set to **true** it will use the setting in the *secrets.ini* file.
+
+- Long_lived_access_token, **optional** parameter. You need to use if you like to receive notifications on Home Assistant web interface.  ([How to get Long Lived Access Token](https://github.com/dmslabsbr/smsUps/raw/master/longlived.md)).
 
 ### Don't forget to connect your UPS's USB port to the computer's USB port where the Home Assistant is running.
 

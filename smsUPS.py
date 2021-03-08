@@ -14,7 +14,7 @@ import uuid
 import socket
 import signal
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 from string import Template
 from paho.mqtt import client
 
@@ -45,6 +45,7 @@ SMSUPS_CLIENTE = True
 LOG_FILE = '/var/tmp/smsUPS.log'
 LOG_LEVEL = logging.DEBUG
 ALLOW_SHUTDOWN = True
+DEVELOPERS_MODE = False
 SHUTDOWN_CMD = '"sudo shutdown -h now", "sudo shutdown now", "systemctl poweroff", "sudo poweroff"'
 # CONFIG Device
 UPS_NAME='UPS'
@@ -52,6 +53,17 @@ UPS_ID = '01'
 UPS_NAME_ID = 'UPS_01'
 UPS_BATERY_LEVEL = 30
 UPS_INPUT_VAC = 50
+# HASS
+Long_lived_access_token = ""
+MY_DEVELOPERS_ACCESS_TOKEN = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiIyYTk3MmIyZjY3Yzk0OTYyOWI4MzJhY2VlMDQ2MTI1ZSIsImlhdCI6MTYxNDk3NzQ3NCwiZXhwIjoxOTMwMzM3NDc0fQ.26_bRAvcPMc4SFCEZwviHGrSTBtOq6fYbPMyHmn2QY8"
+HASS_CMD_NOTIFY = '''echo `curl -sS -X POST \
+    -H "Authorization: Bearer $Long_lived_access_token" \
+    -H "Content-Type: application/json" \
+    -d '{"message": "$message", "title": "$titulo" $outro}' \
+    http://homeassistant:8123/api/services/persistent_notification/create `
+'''
+HASS_DEFAULT_SHUTDOWN_ID = "54543122"
+HASS_DEFAULT_NOENERGY_ID = "54543123"
 
 class Color:
     # Foreground
@@ -92,7 +104,7 @@ class Color:
     B_White = "\x1b[107m"
 
 # CONST
-VERSAO = '0.34'
+VERSAO = '0.36'
 CR = '0D'
 MANUFACTURER = 'dmslabs'
 VIA_DEVICE = 'smsUPS'
@@ -104,7 +116,7 @@ INTERVALO_EXPIRE = int(INTERVALO_MQTT * INTERVALO_SERIAL)
 DEFAULT_MQTT_PASS = "mqtt_pass"
 USE_SECRETS = True
 SHUTDOWN_CMD_HASS = 'echo `curl -s -X POST -H "Authorization: Bearer $SUPERVISOR_TOKEN" "http://hassio/host/shutdown"`'
-SHUTDOWN_CMD_DARWIN = ''
+SHUTDOWN_CMD_DARWIN = '''osascript -e 'tell app "System Events" to shut down'''
 
 respostaH = [None] * 18
 
@@ -137,6 +149,7 @@ clientOk = False
 PATH_ROOT = pathlib.Path().absolute()
 PATH_ROOT = str(PATH_ROOT.resolve())
 gLastMidMqtt = 0
+gBattery = {'time': 0, 'batterylevel': 0}
 
 
 noBreakInfo = {'name':'',
@@ -250,10 +263,24 @@ def str2List(texto):
         ret[i] = ret[i].strip()
     return ret
     
+def notifica_n_hass_shutdown(numeroVezes, tempoPorVez):
+    if not IN_HASSIO: return None
+    for i in range(numeroVezes):
+        tempo_restante = int( (numeroVezes-i+1) * tempoPorVez )
+        notifica_hass('Going to shutdown in ' + str(tempo_restante),'The computer will shutdown.', HASS_DEFAULT_SHUTDOWN_ID)
+        time.sleep(tempoPorVez)
+
+def runNvezes(numeroVezes, tempoPorVez, metodo, keyword_arguments):
+    ''' testar melhor '''
+    # TODO testar melhor
+    for i in range(numeroVezes):
+        metodo(*keyword_arguments)
+        time.sleep(tempoPorVez)
+    return None
 
 def mostraErro(e, nivel=10, msg_add=""):
     err_msg = msg_add + ' / Error! Code: {c}, Message, {m}'.format(c = type(e).__name__, m = str(e))
-    print(err_msg)
+    print(Color.F_Red + err_msg + Color.F_Default)
     if nivel == logging.DEBUG: log.debug(err_msg)      # 10
     if nivel == logging.INFO: log.info(err_msg)       # 20
     if nivel == logging.WARNING: log.warning(err_msg)    # 30
@@ -276,10 +303,13 @@ def substitui_secrets():
     global ALLOW_SHUTDOWN
     global SHUTDOWN_CMD
     global USE_SECRETS
+    global Long_lived_access_token
 
     log.debug ("Loading env data....")
     MQTT_HOST = pegaEnv("MQTT_HOST")
-    MQTT_PASSWORD = pegaEnv("MQTT_PASS")
+    MQTT_PASSWORD_tmp = pegaEnv("MQTT_PASS")
+    if not DEVELOPERS_MODE:
+        MQTT_PASSWORD = MQTT_PASSWORD_tmp
     MQTT_USERNAME = pegaEnv("MQTT_USER")
     PORTA = str2List(pegaEnv("PORTA"))
     UPS_NAME = pegaEnv("UPS_NAME")
@@ -292,6 +322,9 @@ def substitui_secrets():
     SHUTDOWN_CMD = pegaEnv("SHUTDOWN_CMD")
     SHUTDOWN_CMD = str2List(SHUTDOWN_CMD)
     USE_SECRETS = str2bool(pegaEnv("USE_SECRETS"))
+    Long_lived_access_token = pegaEnv("Long_lived_access_token")
+    if Long_lived_access_token == '' and DEVELOPERS_MODE and IN_HASSIO:
+        Long_lived_access_token = MY_DEVELOPERS_ACCESS_TOKEN
     log.debug ("Env data loaded.")
 
 def get_secrets():
@@ -320,6 +353,7 @@ def get_secrets():
     global LOG_FILE
     global LOG_LEVEL
     global ALLOW_SHUTDOWN
+    global DEVELOPERS_MODE
     global SHUTDOWN_CMD
     global SECRETS
 
@@ -355,6 +389,7 @@ def get_secrets():
     LOG_FILE = get_config(config, 'config', 'LOG_FILE', LOG_FILE)
     LOG_LEVEL = get_config(config, 'config', 'LOG_LEVEL', LOG_LEVEL, getInt=True)
     ALLOW_SHUTDOWN = get_config(config, 'config', 'ALLOW_SHUTDOWN', SMSUPS_CLIENTE, getBool=True)
+    DEVELOPERS_MODE = get_config(config, 'config', 'DEVELOPERS_MODE', SMSUPS_CLIENTE, getBool=True)
     SHUTDOWN_CMD = get_config(config, 'config', 'SHUTDOWN_CMD', SHUTDOWN_CMD, split = True)
 
     if ENVIA_HASS: ENVIA_JSON = True
@@ -427,7 +462,7 @@ def receive_signal(signum, stack):
     print ('Received: ', signum)
     log.debug('sinal' + str(signum))
 
-def shutdown_computer(s = 60):
+def shutdown_computer(s = 120):
     global status
     ''' try to shutdown the computer '''
     log.warning('Trying to shutdown the computer...')
@@ -454,6 +489,8 @@ def shutdown_computer(s = 60):
     if IN_HASSIO:
         # inside docker hass, you need anothen command
         new_SHUTDOWN_CMD.insert(0, SHUTDOWN_CMD_HASS)
+    if sys.platform == 'darwin':
+        new_SHUTDOWN_CMD.insert(0, SHUTDOWN_CMD_DARWIN)
     if sys.platform == 'win32':
         import ctypes
         time.sleep(s)
@@ -461,7 +498,10 @@ def shutdown_computer(s = 60):
         user32.ExitWindowsEx(0x00000008, 0x00000000)
     else:
         import os
-        time.sleep(s)
+        #time.sleep(s)
+        tempoPorVez = int(s/3)
+        numeroVezes = s/tempoPorVez
+        notifica_n_hass_shutdown(numeroVezes=numeroVezes, tempoPorVez=tempoPorVez)
         for i in range(len(new_SHUTDOWN_CMD)): # SHUTDOWN_CMD
             command = new_SHUTDOWN_CMD[i]  # trying many commands - SHUTDOWN_CMD[i]
             log.info('* Trying...' + command)
@@ -476,8 +516,8 @@ def publicaMqtt(topic, payload):
     "Publica no MQTT atual"
     global gLastMidMqtt
     (rc, mid) = client.publish(topic, payload)
-    print (Color.F_Cyan, topic, Color.F_Default)
-    print (Color.F_Blue, payload, Color.F_Default)
+    # print (Color.F_Cyan, topic, Color.F_Default)
+    # print (Color.F_Blue, payload, Color.F_Default)
     gLastMidMqtt = mid
     if rc == mqtt.MQTT_ERR_NO_CONN:
         print ("mqtt.MQTT_ERR_NO_CONN")
@@ -504,8 +544,12 @@ def onOff(value, ON = "on", OFF = "off"):
 def on_connect(client, userdata, flags, rc):
     global Connected
     global status
-    print("MQTT connected with result code "+str(rc))
-    log.debug("MQTT connected with result code "+str(rc))
+    if rc == 0:
+        cor = Color.F_Blue 
+    else:
+        cor = Color.F_Red
+    print(cor + "MQTT connected with result code " + str(rc) + Color.F_Default)
+    log.debug("MQTT connected with result code " + str(rc))
     if rc == 0:
         print ("Connected to " + MQTT_HOST)
         Connected = True
@@ -1012,7 +1056,7 @@ def queryQ(raw = ""):
                 gMqttEnviado['b'] = False
                 statusLast = status.copy()
         if not gMqttEnviado['b']:
-            log.debug('Publica Dados')
+            # log.debug('Publica Dados')
             publicaDados(upsData)
     return upsData
 
@@ -1030,12 +1074,55 @@ def checkDataChange(now, last, tags = "SERIAL_CHECK_ALWAYS"):
 
 def checkBatteryLevel(upsData):
     ''' check if battery still enough '''
+    global gBattery
     bat = int(upsData['batterylevel'])
+    BateriaEmUso = upsData['BateriaEmUso']
     if bat < UPS_BATERY_LEVEL and bat!=0:
         # bateria acabando.
-        checkBatteryLevel2(bat, upsData['BateriaBaixa'], upsData['BateriaEmUso'], int(upsData['inputVac']) )
+        checkBatteryLevel2(bat, upsData['BateriaBaixa'], BateriaEmUso, int(upsData['inputVac']) )
         #if upsData['BateriaBaixa']=="on" or upsData['BateriaEmUso']=='on': # evita shutdown no pico de volta
         #    client.publish(MQTT_PUB + "/cmd", MQTT_CMD_SHUTDOWN )
+    if IN_HASSIO:
+        msg = ""
+        tit = ""
+        id = HASS_DEFAULT_NOENERGY_ID
+        if bat == 0: bat = 1
+        if str2bool(BateriaEmUso):
+            if gBattery['time'] == 0: 
+                gBattery['time'] = datetime.now()
+                gBattery['batterylevel'] = bat
+            else:
+                time_dif = date_diff_in_Seconds(datetime.now(), gBattery['time'])
+                bat_dif = bat - gBattery['batterylevel']
+                batConsumo = bat_dif / time_dif
+                print("batConsumo: ", batConsumo)
+                if batConsumo != 0:
+                    batLeft = int((bat - UPS_BATERY_LEVEL) / batConsumo)
+                else:
+                    batLeft = int((bat - UPS_BATERY_LEVEL))
+                id = HASS_DEFAULT_NOENERGY_ID
+                tit = "No energy!"
+                msg = "".join(("Running without energy for **" + str(timedelta(seconds=time_dif)) + " seconds.**",
+                    "<BR><BR>" + "Battery level: **" + str(bat) + " %" + "**",
+                    "<BR>" + "Shutdown battery level: **" + str(UPS_BATERY_LEVEL) + " %" + "**",
+                    "<BR>" + "Estimated shutdown time in **" + str(timedelta(seconds=batLeft)) + "**"))
+        else:
+            if not gBattery['time']== 0:
+                time_dif = date_diff_in_Seconds(datetime.now(), gBattery['time'])
+                id = int(HASS_DEFAULT_NOENERGY_ID) + 1
+                tit = "Energy returned!"
+                msg = "".join(("Now battery is charging.",
+                    "<BR><BR>" + "Battery level: **" + str(bat) + " %" + "**",
+                    "<BR>" + "I ran without power for **" + str(timedelta(seconds=time_dif)) + " seconds.**"))
+                gBattery['time'] = 0 # zera contador de tempo de uso da bateria.
+                gBattery['batterylevel'] = 1
+        if not msg == "":
+            str_hora = datetime.today().strftime('%Y-%m-%d %H:%M:%S')
+            msg_i = "**" + UPS_NAME_ID + "**<BR>"
+            nova_msg = "".join((msg_i, msg, '<BR><BR>*', str_hora, "*<BR>*<sub><sup>by ", MANUFACTURER, "</sup></sub>*"))
+            titulo = APP_NAME + " - " + tit 
+            notifica_hass(titulo = titulo, msg = nova_msg, id = id)
+
 
 def checkBatteryLevel2(batterylevel, bateriaBaixa, bateriaEmUso, inputVac):
     ''' Verifica o nível de bateria e chama o shutdown caso necessário '''
@@ -1050,10 +1137,9 @@ def checkBatteryLevel2(batterylevel, bateriaBaixa, bateriaEmUso, inputVac):
                 log.warning ("Sending shutdown command")
                 print ("Sending shutdown command")
                 # TODO colocar o horario
-                #mqqt_cmd_copy = MQTT_CMD_SHUTDOWN
-                #mqqt_cmd_copy['publish_time'] = datetime.today().strftime('%Y-%m-%d %H:%M:%S')
-                #(rc, mid) = publicaMqtt(MQTT_PUB + "/cmd", mqqt_cmd_copy ) # MQTT_CMD_SHUTDOWN
-                (rc, mid) = publicaMqtt(MQTT_PUB + "/cmd", MQTT_CMD_SHUTDOWN ) # 
+                mqqt_cmd_copy = Template(MQTT_CMD_SHUTDOWN)
+                mqqt_cmd_copy = mqqt_cmd_copy.safe_substitute(publish_time = datetime.today().strftime('%Y-%m-%d %H:%M:%S'))
+                (rc, mid) = publicaMqtt(MQTT_PUB + "/cmd", mqqt_cmd_copy ) # 
 
 
 def json_remove_vazio(strJson):
@@ -1234,9 +1320,32 @@ def iniciaLogger():
         log.debug ('LOG file: ' + hdlr.baseFilename)
     return log
 
+def notifica_hass (titulo, msg, id = False):
+    global Long_lived_access_token
+    if not IN_HASSIO: return None
+    if type(id) is str:
+        id = int(id)
+    if IN_HASSIO and len(Long_lived_access_token) > 0:
+        command = Template( HASS_CMD_NOTIFY ) 
+        outro = ""
+        if int(id) > 1:
+            outro = ', "notification_id": "' + str(id) + '"'
+        substitui = {
+            'Long_lived_access_token':Long_lived_access_token,
+            'message': msg,
+            'titulo': titulo,
+            'outro': outro} 
+        command = command.substitute(substitui)
+        ## ENVIA COMANDO
+        ret = os.system(command)
+        if ret != 0:
+            print('* Tried: ', Color.F_Blue, command, Color.F_Default)
+        # print (Color.F_Cyan, 'Resultado: ' + str(ret), Color.F_Default)
+
+
 # APP START - Inicio
 
-print (Color.B_Blue + "********** SMS UPS v." + VERSAO + Color.B_Default)
+print (Color.B_Blue + "********** " + MANUFACTURER + " " + APP_NAME + " v." + VERSAO + Color.B_Default)
 print (Color.B_Green + "Starting up... " + datetime.today().strftime('%Y-%m-%d %H:%M:%S') + Color.B_Default)
 
 # hass.io token
@@ -1248,7 +1357,7 @@ if IN_HASSIO:
 else:
     log = iniciaLogger()
 
-log.debug("********** SMS UPS v." + VERSAO)
+log.debug("********** " + MANUFACTURER + " " + APP_NAME + " v." + VERSAO)
 log.debug("Starting up...")
 
 print ("Path: " + PATH_ROOT)
@@ -1289,8 +1398,8 @@ print ("IP: " + Color.F_Magenta + status['ip'] + Color.F_Default)
 print ("UPS_ID: " + Color.B_LightYellow + str(UPS_ID) + Color.B_Default)
 print ("UPS_NAME: " + Color.B_LightYellow + str(UPS_NAME) + Color.B_Default)
 print ("UPS_NAME_ID: " + Color.B_LightYellow + str(UPS_NAME_ID) + Color.B_Default)
-
-
+print ("ALLOW_SHUTDOWN: " + Color.B_Red + str(ALLOW_SHUTDOWN) + Color.B_Default)
+# print ("Long_lived_access_token: " + Color.F_Magenta + Long_lived_access_token + Color.F_Default)
 
 # info
 try:
