@@ -6,11 +6,11 @@
 
 <img src="https://github.com/dmslabsbr/smsUps/raw/master/hass1.png" alt="Hass.io screen Add a new repository." width="500" /> 
 
-#### b) Add the **URL** (https://github.com/dmslabsbr/smsUps) of the repository and then press "**Add**". A new card for the repository will appear.
+#### b) Add the **URL** (https://github.com/dmslabsbr/smsUps) of the repository and then press "**Add**". 
 
 <img src="https://github.com/dmslabsbr/smsUps/raw/master/hass2.png" alt="Hass.io screen Add a new repository." width="500" /> 
 
-#### c) Add the **URL** (https://github.com/dmslabsbr/smsUps) of the repository and then press "**Add**". A new card for the repository will appear.
+#### c) A new card for the repository will appear.
 
 <img src="https://github.com/dmslabsbr/smsUps/raw/master/hass3.png" alt="Hass.io screen Add a new repository." width="400" /> 
 
