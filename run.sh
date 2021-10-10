@@ -6,9 +6,9 @@ SYSTEM_USER=/data/system_user.json
 
 bashio::log.red "Exporting config data"
 
-export MQTT_HOST=$(jq --raw-output '.MQTT_HOST' $CONFIG_PATH)
-export MQTT_USER=$(jq --raw-output '.MQTT_USER' $CONFIG_PATH)
-export MQTT_PASS=$(jq --raw-output '.MQTT_PASS' $CONFIG_PATH)
+#export MQTT_HOST=$(jq --raw-output '.MQTT_HOST' $CONFIG_PATH)
+#export MQTT_USER=$(jq --raw-output '.MQTT_USER' $CONFIG_PATH)
+#export MQTT_PASS=$(jq --raw-output '.MQTT_PASS' $CONFIG_PATH)
 export SMSUPS_SERVER=$(jq --raw-output '.SMSUPS_SERVER' $CONFIG_PATH)
 export SMSUPS_CLIENTE=$(jq --raw-output '.SMSUPS_CLIENTE' $CONFIG_PATH)
 export PORTA=$(jq --raw-output '.PORTA' $CONFIG_PATH)
@@ -19,6 +19,10 @@ export UPS_ID=$(jq --raw-output '.UPS_ID' $CONFIG_PATH)
 export USE_SECRETS=$(jq --raw-output '.USE_SECRETS' $CONFIG_PATH)
 export allow_shutdown=$(jq --raw-output '.allow_shutdown' $CONFIG_PATH)
 export Long_lived_access_token=$(jq --raw-output '.Long_lived_access_token' $CONFIG_PATH)
+
+export MQTT_HOST=$(bashio::services mqtt "host")
+export MQTT_USER=$(bashio::services mqtt "username")
+export MQTT_PASSWORD=$(bashio::services mqtt "password")
 
 
 bashio::log.blue "PATH: "
