@@ -17,7 +17,8 @@ import sys
 from datetime import datetime, timedelta
 from string import Template
 from paho.mqtt import client
-
+import dmslibs as dl
+from dmslibs import Color, IN_HASSIO, mostraErro, log, pega_url, pega_url2, printC
 
 #TODO: Padronizar o formato do tempo impresso  datetime.now() e outros.
 
@@ -51,6 +52,7 @@ SHUTDOWN_CMD = '"sudo shutdown -h now", "sudo shutdown now", "systemctl poweroff
 UPS_NAME='UPS'
 UPS_ID = '01'
 UPS_NAME_ID = 'UPS_01'
+SMSUPS_FULL_POWER = 'SMSUPS_FULL_POWER'
 UPS_BATERY_LEVEL = 30
 UPS_INPUT_VAC = 50
 # HASS
@@ -297,6 +299,7 @@ def substitui_secrets():
     global UPS_NAME
     global UPS_ID
     global UPS_NAME_ID
+    global SMSUPS_FULL_POWER
     global MQTT_PUB
     global SMSUPS_SERVER
     global SMSUPS_CLIENTE
@@ -304,16 +307,22 @@ def substitui_secrets():
     global SHUTDOWN_CMD
     global USE_SECRETS
     global Long_lived_access_token
+    global DEVELOPERS_MODE
 
     log.debug ("Loading env data....")
     MQTT_HOST = pegaEnv("MQTT_HOST")
     MQTT_PASSWORD_tmp = pegaEnv("MQTT_PASS")
+
+    DEVELOPERS_MODE = dl.pegaEnv("DEVELOPERS_MODE")
+    DEVELOPERS_MODE = dl.onOff(DEVELOPERS_MODE, True, False)
+
     if not DEVELOPERS_MODE:
         MQTT_PASSWORD = MQTT_PASSWORD_tmp
     MQTT_USERNAME = pegaEnv("MQTT_USER")
     PORTA = str2List(pegaEnv("PORTA"))
     UPS_NAME = pegaEnv("UPS_NAME")
     UPS_ID = pegaEnv("UPS_ID")
+    SMSUPS_FULL_POWER = pegaEnv("SMSUPS_FULL_POWER")
     #UPS_NAME_ID = pegaEnv("UPS_NAME_ID")
     setaUpsNameId()
     SMSUPS_SERVER = str2bool(pegaEnv("SMSUPS_SERVER"))
@@ -346,6 +355,7 @@ def get_secrets():
     global ECHO
     global UPS_NAME
     global UPS_ID
+    global SMSUPS_FULL_POWER
     global UPS_NAME_ID
     global UPS_BATERY_LEVEL
     global SMSUPS_SERVER
@@ -360,6 +370,7 @@ def get_secrets():
     config = getConfigParser()
 
     print ("Reading secrets.ini")
+    log.warning('Reading secrets.ini')
 
     # le os dados
     MQTT_PASSWORD = get_config(config, 'secrets', 'MQTT_PASS', MQTT_PASSWORD)
@@ -377,7 +388,8 @@ def get_secrets():
     ENVIA_MUITOS = get_config(config, 'config','ENVIA_MUITOS', ENVIA_MUITOS, getBool=True)
     ENVIA_HASS = get_config(config, 'config','ENVIA_HASS', ENVIA_HASS, getBool=True)
     ECHO = get_config(config, 'config','ECHO', ECHO, getBool=True)
-    UPS_NAME = get_config(config, 'device','UPS_NAME', UPS_NAME) 
+    UPS_NAME = get_config(config, 'device','UPS_NAME', UPS_NAME)
+    SMSUPS_FULL_POWER=get_config(config, 'device','SMSUPS_FULL_POWER', SMSUPS_FULL_POWER)
     UPS_ID = get_config(config, 'device','UPS_ID', UPS_ID)
     setaUpsNameId()
     #UPS_NAME_ID = UPS_NAME + "_" + UPS_ID
@@ -1203,8 +1215,8 @@ def send_hass():
                  'via_device': VIA_DEVICE,
                  'ups_id': UPS_NAME_ID,
                  'uniq_id': UPS_ID}
-    
-    log.debug('Sensor_dic: ' + str(len(sensor_dic)))
+    if DEVELOPERS_MODE:
+        log.debug('Sensor_dic: ' + str(len(sensor_dic)))
     if len(sensor_dic) == 0:
         for k in json_hass.items():
             json_file_path = k[0] + '.json'
@@ -1222,7 +1234,8 @@ def send_hass():
 
     gDevices_enviados['b'] = True
     gDevices_enviados['t'] = datetime.now()
-    log.debug('Hass Sended')
+    if DEVELOPERS_MODE:
+        log.debug('Hass Sended')
 
 
 def abre_serial():

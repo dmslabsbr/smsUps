@@ -1,6 +1,9 @@
 #!/usr/bin/with-contenv bashio
 set +u
 
+bashio::log.green "Starting add-on container..."
+date
+
 CONFIG_PATH=/data/options.json
 SYSTEM_USER=/data/system_user.json
 
@@ -16,14 +19,25 @@ export SHUTDOWN_CMD=$(jq --raw-output '.SHUTDOWN_CMD' $CONFIG_PATH)
 export SMSUPS_SERVER=$(jq --raw-output '.SMSUPS_SERVER' $CONFIG_PATH)
 export UPS_NAME=$(jq --raw-output '.UPS_NAME' $CONFIG_PATH)
 export UPS_ID=$(jq --raw-output '.UPS_ID' $CONFIG_PATH)
+export SMSUPS_FULL_POWER=$(jq --raw-output '.SMSUPS_FULL_POWER' $CONFIG_PATH)
 export USE_SECRETS=$(jq --raw-output '.USE_SECRETS' $CONFIG_PATH)
 export allow_shutdown=$(jq --raw-output '.allow_shutdown' $CONFIG_PATH)
 export Long_lived_access_token=$(jq --raw-output '.Long_lived_access_token' $CONFIG_PATH)
 
+bashio::log.blue "Getting mqqt data..."
+
 export MQTT_HOST=$(bashio::services mqtt "host")
 export MQTT_USER=$(bashio::services mqtt "username")
-export MQTT_PASSWORD=$(bashio::services mqtt "password")
+export MQTT_PASS=$(bashio::services mqtt "password")
 
+export DEVELOPERS_MODE=$(jq --raw-output '.DEVELOPERS_MODE' $CONFIG_PATH)
+
+ls * -la
+pwd
+bashio::log.green "Copying html templates..."
+mkdir -p /data/templates
+cp /*.html /data/templates
+ls -la /data/templates
 
 bashio::log.blue "PATH: "
 pwd
