@@ -1,6 +1,6 @@
 {
   "name": "SMS UPS BETA",
-  "version": "0.39i",
+  "version": "0.39j",
   "slug": "hassio_sms_ups",
   "description": "Read data from SMS BRASIL UPS",
   "arch": ["armhf", "armv7", "aarch64", "amd64", "i386"],
@@ -22,8 +22,8 @@
   "services": [
     "mqtt:need"
   ],
-  "ingress": false,
-  "ingress_port": 5001,
+  "ingress": true,
+  "ingress_port": 5002,
   "host_network": true,
   "panel_icon": "mdi:cloud",
   "panel_title": "SMS BRASIL UPS",
@@ -36,7 +36,7 @@
     "SMSUPS_FULL_POWER": 1400,
     "PORTA": "/dev/ttyUSB0",
     "allow_shutdown": true,
-    "SHUTDOWN_CMD": ["sudo shutdown -h now", "sudo shutdown now", "systemctl poweroff", "sudo poweroff"],
+    "SHUTDOWN_CMD": "sudo shutdown -h now, sudo shutdown now, systemctl poweroff, sudo poweroff",
     "USE_SECRETS": false,
     "Long_lived_access_token":"",
     "DEVELOPERS_MODE": false
