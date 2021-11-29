@@ -25,6 +25,12 @@
       "icon":"mdi:fuel",
       "unit_of_measurement":"%"
    },
+   "powerNow":{
+      "name":"powerNow",
+      "device_class":"power",
+      "icon":"mdi:bolt",
+      "unit_of_measurement":"W"
+   },
    "batterylevel":{
       "name":"batterylevel",
       "state_class":"measurement",

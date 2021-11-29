@@ -1,6 +1,6 @@
 {
   "name": "SMS UPS BETA",
-  "version": "0.39b",
+  "version": "0.39i",
   "slug": "hassio_sms_ups",
   "description": "Read data from SMS BRASIL UPS",
   "arch": ["armhf", "armv7", "aarch64", "amd64", "i386"],
@@ -8,22 +8,22 @@
   "startup": "application",
   "boot": "auto",
   "ports": {
-    "8000/tcp": 8000
+    "5002/tcp": 5002 
   },
   "ports_description": {
-    "8000/tcp": "Web Interface - Not working yet!"
+    "5002/tcp": "Web Interface - Not working yet!"
   },
   "hassio_api": true,
   "homeassistant_api": true,
   "hassio_role": "manager",
   "devicetree": true,
   "devices": ["/dev/ttyUSB0", "/dev/ttyAMA0"],
-  "webui": "[PROTO:use_ssl]://[HOST]:[PORT:8000]/",
+  "webui": "[PROTO:use_ssl]://[HOST]:[PORT:5000]/",
   "services": [
     "mqtt:need"
   ],
-  "ingress": true,
-  "ingress_port": 5000,
+  "ingress": false,
+  "ingress_port": 5001,
   "host_network": true,
   "panel_icon": "mdi:cloud",
   "panel_title": "SMS BRASIL UPS",
@@ -46,7 +46,7 @@
     "UPS_ID": "str",
     "SMSUPS_SERVER": "bool",
     "SMSUPS_CLIENTE": "bool",
-    "SMSUPS_FULL_POWER": "str",
+    "SMSUPS_FULL_POWER": "int(100,10000)",
     "PORTA": "str",
     "allow_shutdown": "bool",
     "SHUTDOWN_CMD": "str",
