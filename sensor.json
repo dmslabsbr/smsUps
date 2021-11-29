@@ -1,33 +1,47 @@
 {
    "inputVac":{
       "name":"inputVac",
-      "device_class":"power",
-      "icon":"mdi:power-plug",
+      "device_class":"voltage",
+      "state_class":"measurement",
+      "icon":"mdi:transmission-tower-export",
       "unit_of_measurement":"V"
    },
    "outputVac":{
       "name":"outputVac",
       "icon":"mdi:power-socket-fr",
-      "device_class":"power",
+      "device_class":"voltage",
+      "state_class":"measurement",
       "unit_of_measurement":"V"
    },
    "outputHz":{
       "name":"outputHz",
-      "icon":"mdi:power-socket",
+      "icon":"mdi:sine-wave",
+      "state_class":"measurement",
       "unit_of_measurement":"Hz"
    },
    "outputPower":{
       "name":"outputPower",
+      "device_class":"power_factor",
       "icon":"mdi:fuel",
       "unit_of_measurement":"%"
    },
+   "powerNow":{
+      "name":"powerNow",
+      "device_class":"power",
+      "icon":"mdi:bolt",
+      "unit_of_measurement":"W"
+   },
    "batterylevel":{
       "name":"batterylevel",
-      "device_class":"battery"
+      "state_class":"measurement",
+      "device_class":"battery",
+      "unit_of_measurement":"%"
    },
    "temperatureC":{
       "name":"temperatureC",
-      "device_class":"temperature"
+      "state_class":"measurement",
+      "device_class":"temperature",
+      "unit_of_measurement":"°C"
    },
    "todos":{ 
        "name":"",

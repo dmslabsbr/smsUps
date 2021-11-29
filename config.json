@@ -1,6 +1,6 @@
 {
   "name": "SMS UPS BETA",
-  "version": "0.38",
+  "version": "0.39i",
   "slug": "hassio_sms_ups",
   "description": "Read data from SMS BRASIL UPS",
   "arch": ["armhf", "armv7", "aarch64", "amd64", "i386"],
@@ -8,46 +8,50 @@
   "startup": "application",
   "boot": "auto",
   "ports": {
-    "8000/tcp": 8000
+    "5002/tcp": 5002 
   },
   "ports_description": {
-    "3493/tcp": "Web Interface - Not working yet!"
+    "5002/tcp": "Web Interface - Not working yet!"
   },
   "hassio_api": true,
   "homeassistant_api": true,
   "hassio_role": "manager",
   "devicetree": true,
   "devices": ["/dev/ttyUSB0", "/dev/ttyAMA0"],
-  "webui": "[PROTO:use_ssl]://[HOST]:[PORT:8000]/",
+  "webui": "[PROTO:use_ssl]://[HOST]:[PORT:5000]/",
+  "services": [
+    "mqtt:need"
+  ],
+  "ingress": false,
+  "ingress_port": 5001,
+  "host_network": true,
   "panel_icon": "mdi:cloud",
   "panel_title": "SMS BRASIL UPS",
   "panel_admin": true,
   "options": {
-    "MQTT_HOST": "192.168.50.20",
-    "MQTT_USER": "daniel",
-    "MQTT_PASS": "mqtt_pass",
     "UPS_NAME": "SMS",
     "UPS_ID": "01",
     "SMSUPS_SERVER": true,
     "SMSUPS_CLIENTE": true,
+    "SMSUPS_FULL_POWER": 1400,
     "PORTA": "/dev/ttyUSB0",
     "allow_shutdown": true,
     "SHUTDOWN_CMD": ["sudo shutdown -h now", "sudo shutdown now", "systemctl poweroff", "sudo poweroff"],
     "USE_SECRETS": false,
-    "Long_lived_access_token":""
+    "Long_lived_access_token":"",
+    "DEVELOPERS_MODE": false
   },
   "schema": {
-    "MQTT_HOST": "str",
-    "MQTT_USER": "str",
-    "MQTT_PASS": "password",
     "UPS_NAME": "str",
     "UPS_ID": "str",
     "SMSUPS_SERVER": "bool",
     "SMSUPS_CLIENTE": "bool",
+    "SMSUPS_FULL_POWER": "int(100,10000)",
     "PORTA": "str",
     "allow_shutdown": "bool",
     "SHUTDOWN_CMD": "str",
     "USE_SECRETS": "bool",
-    "Long_lived_access_token": "str?"
+    "Long_lived_access_token": "str?",
+    "DEVELOPERS_MODE": "bool"
   }
 }

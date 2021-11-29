@@ -17,7 +17,15 @@ import sys
 from datetime import datetime, timedelta
 from string import Template
 from paho.mqtt import client
+import dmslibs as dl
+from dmslibs import Color, IN_HASSIO, mostraErro, log, pega_url, pega_url2, printC
 
+from flask import Flask
+from flask import render_template
+import comum
+import webserver
+import multiprocessing
+from multiprocessing import Process, Pipe
 
 #TODO: Padronizar o formato do tempo impresso  datetime.now() e outros.
 
@@ -51,6 +59,7 @@ SHUTDOWN_CMD = '"sudo shutdown -h now", "sudo shutdown now", "systemctl poweroff
 UPS_NAME='UPS'
 UPS_ID = '01'
 UPS_NAME_ID = 'UPS_01'
+SMSUPS_FULL_POWER = 1450
 UPS_BATERY_LEVEL = 30
 UPS_INPUT_VAC = 50
 # HASS
@@ -64,6 +73,7 @@ HASS_CMD_NOTIFY = '''echo `curl -sS -X POST \
 '''
 HASS_DEFAULT_SHUTDOWN_ID = "54543122"
 HASS_DEFAULT_NOENERGY_ID = "54543123"
+WEB_SERVER = True
 
 class Color:
     # Foreground
@@ -104,7 +114,7 @@ class Color:
     B_White = "\x1b[107m"
 
 # CONST
-VERSAO = '0.37'
+VERSAO = '0.39i'
 CR = '0D'
 MANUFACTURER = 'dmslabs'
 VIA_DEVICE = 'smsUPS'
@@ -159,6 +169,7 @@ noBreak = {'lastinputVac':0,
     'inputVac':0,
     'outputVac':0,
     'outputPower':0,
+    'powerNow':0,
     'outputHz':0,
     'batterylevel':0,
     'temperatureC':0,
@@ -297,6 +308,7 @@ def substitui_secrets():
     global UPS_NAME
     global UPS_ID
     global UPS_NAME_ID
+    global SMSUPS_FULL_POWER
     global MQTT_PUB
     global SMSUPS_SERVER
     global SMSUPS_CLIENTE
@@ -304,16 +316,29 @@ def substitui_secrets():
     global SHUTDOWN_CMD
     global USE_SECRETS
     global Long_lived_access_token
+    global DEVELOPERS_MODE
+    global FILE_COMM
+    global WEB_SERVER
 
     log.debug ("Loading env data....")
     MQTT_HOST = pegaEnv("MQTT_HOST")
     MQTT_PASSWORD_tmp = pegaEnv("MQTT_PASS")
-    if not DEVELOPERS_MODE:
-        MQTT_PASSWORD = MQTT_PASSWORD_tmp
+
+    DEVELOPERS_MODE = dl.pegaEnv("DEVELOPERS_MODE")
+    printC(Color.B_Red, str(DEVELOPERS_MODE))
+
+    
+    #DEVELOPERS_MODE = dl.onOff(DEVELOPERS_MODE, True, False)
+    #printC(Color.B_Red, str(DEVELOPERS_MODE))
+
+
+    #if not DEVELOPERS_MODE:
+    MQTT_PASSWORD = MQTT_PASSWORD_tmp
     MQTT_USERNAME = pegaEnv("MQTT_USER")
     PORTA = str2List(pegaEnv("PORTA"))
     UPS_NAME = pegaEnv("UPS_NAME")
     UPS_ID = pegaEnv("UPS_ID")
+    SMSUPS_FULL_POWER = pegaEnv("SMSUPS_FULL_POWER")
     #UPS_NAME_ID = pegaEnv("UPS_NAME_ID")
     setaUpsNameId()
     SMSUPS_SERVER = str2bool(pegaEnv("SMSUPS_SERVER"))
@@ -325,6 +350,11 @@ def substitui_secrets():
     Long_lived_access_token = pegaEnv("Long_lived_access_token")
     if Long_lived_access_token == '' and DEVELOPERS_MODE and IN_HASSIO:
         Long_lived_access_token = MY_DEVELOPERS_ACCESS_TOKEN
+
+    if dl.IN_HASSIO():
+        WEB_SERVER = True
+        FILE_COMM = '/data/' + comum.FILE_COMM
+
     log.debug ("Env data loaded.")
 
 def get_secrets():
@@ -346,6 +376,7 @@ def get_secrets():
     global ECHO
     global UPS_NAME
     global UPS_ID
+    global SMSUPS_FULL_POWER
     global UPS_NAME_ID
     global UPS_BATERY_LEVEL
     global SMSUPS_SERVER
@@ -360,6 +391,7 @@ def get_secrets():
     config = getConfigParser()
 
     print ("Reading secrets.ini")
+    log.warning('Reading secrets.ini')
 
     # le os dados
     MQTT_PASSWORD = get_config(config, 'secrets', 'MQTT_PASS', MQTT_PASSWORD)
@@ -377,7 +409,8 @@ def get_secrets():
     ENVIA_MUITOS = get_config(config, 'config','ENVIA_MUITOS', ENVIA_MUITOS, getBool=True)
     ENVIA_HASS = get_config(config, 'config','ENVIA_HASS', ENVIA_HASS, getBool=True)
     ECHO = get_config(config, 'config','ECHO', ECHO, getBool=True)
-    UPS_NAME = get_config(config, 'device','UPS_NAME', UPS_NAME) 
+    UPS_NAME = get_config(config, 'device','UPS_NAME', UPS_NAME)
+    SMSUPS_FULL_POWER=get_config(config, 'device','SMSUPS_FULL_POWER', SMSUPS_FULL_POWER, getInt=True)
     UPS_ID = get_config(config, 'device','UPS_ID', UPS_ID)
     setaUpsNameId()
     #UPS_NAME_ID = UPS_NAME + "_" + UPS_ID
@@ -393,6 +426,8 @@ def get_secrets():
         key = 'DEVELOPERS_MODE',
         default = DEVELOPERS_MODE,
         getBool=True)
+    printC(Color.B_Red, str(DEVELOPERS_MODE))
+
     SHUTDOWN_CMD = get_config(config, 'config', 'SHUTDOWN_CMD', SHUTDOWN_CMD, split = True)
 
     if ENVIA_HASS: ENVIA_JSON = True
@@ -884,6 +919,8 @@ def dadosNoBreak(lista):
     noBreak['inputVac'] = toINT16(lista[2])/10
     noBreak['outputVac'] = toINT16(lista[3])/10
     noBreak['outputPower'] = toINT16(lista[4])/10
+    # TODO: melhorar isto.
+    noBreak['powerNow'] = int(SMSUPS_FULL_POWER) * int(float(str(noBreak['outputPower'])))/100
     noBreak['outputHz'] = toINT16(lista[5])/10
     noBreak['batterylevel'] = toINT16(lista[6])/10
     noBreak['temperatureC'] = toINT16(lista[7])/10
@@ -981,9 +1018,14 @@ def getNoBreakInfo():
         else:
             noBreakInfo['name'] = noBreakInfo['name'][1:]
             status['ups'] = 'Connected'
+    log.debug ("UPS Info: " + 
+        noBreakInfo['name'] + " / " + 
+        noBreakInfo['info'])
     if noBreakInfo['name'][-1:] == '\r': noBreakInfo['name'] = noBreakInfo['name'][0:-1]
     if noBreakInfo['info'][-1:] == '\r': noBreakInfo['info'] = noBreakInfo['info'][0:-1]
-    if noBreakInfo['info'][0] == ';': noBreakInfo['info'] = noBreakInfo['info'][1:]
+    if len(noBreakInfo['info'])>=1:
+        if noBreakInfo['info'][0] == ';':
+            noBreakInfo['info'] = noBreakInfo['info'][1:]
     log.debug ("UPS Info: " + 
         noBreakInfo['name'] + " / " + 
         noBreakInfo['info'])
@@ -1203,8 +1245,8 @@ def send_hass():
                  'via_device': VIA_DEVICE,
                  'ups_id': UPS_NAME_ID,
                  'uniq_id': UPS_ID}
-    
-    log.debug('Sensor_dic: ' + str(len(sensor_dic)))
+    if DEVELOPERS_MODE:
+        log.debug('Sensor_dic: ' + str(len(sensor_dic)))
     if len(sensor_dic) == 0:
         for k in json_hass.items():
             json_file_path = k[0] + '.json'
@@ -1222,7 +1264,8 @@ def send_hass():
 
     gDevices_enviados['b'] = True
     gDevices_enviados['t'] = datetime.now()
-    log.debug('Hass Sended')
+    if DEVELOPERS_MODE:
+        log.debug('Hass Sended')
 
 
 def abre_serial():
@@ -1346,6 +1389,76 @@ def notifica_hass (titulo, msg, id = False):
         # print (Color.F_Cyan, 'Resultado: ' + str(ret), Color.F_Default)
 
 
+def publicaDadosWeb(sensor_dic):
+    # publica dados na web por meio do webserver via JSON
+    jsonx = publicaDados(sensor_dic)
+    # add new data
+    json_load = json.loads(jsonx)
+    #json_load['last_time'] = gEnvios['last_time']  
+    #json_load['load_cnt'] = gEnvios['load_cnt']
+    #json_load['load_time'] = gEnvios['load_time']
+    json_x = json.dumps(json_load)
+    return json_x
+
+
+def publicaDados(upsData):
+    # publica dados no MQTT
+    global status
+    global gMqttEnviado
+    jsonUPS = json.dumps(upsData)
+    (rc, mid) = publicaMqtt(MQTT_PUB + "/json", jsonUPS)
+    gMqttEnviado['b'] = True
+    gMqttEnviado['t'] = datetime.now()
+    print (Color.F_Blue + "Dados UPS Publicados..." + Color.F_Default + str(datetime.now()))
+    if status['mqtt'] == 'on': 
+        status[APP_NAME] = "on"
+    else:
+        status[APP_NAME] = "off"
+    send_clients_status()
+    return jsonUPS
+
+
+
+# RODA O APP WEB
+def iniciaWebServerB(Conf):
+    ''' inicia o webserver '''
+    printC(Color.B_Blue,'Port: ' + str(os.getenv('PORT', 4443)))
+    printC(Color.B_Blue,'Host: ' + str(os.getenv('IP', '0.0.0.0')))
+    if dl.IN_HASSIO():
+        webserver.app.run(debug=True,
+            host="0.0.0.0",
+            threaded=True
+        )
+    else:
+        webserver.app.run(debug=True,
+            host=os.getenv('IP', '0.0.0.0'), 
+            port=4567 # int(os.getenv('PORT', 4443)
+        )
+
+
+def iniciaWebServer():
+    ''' inicia o webserver '''
+    printC (Color.B_Magenta, "WEB SERVER Starting ...")
+
+    path_index = comum.PATH_TEMPLATE
+    if dl.IN_HASSIO():
+        path_index = comum.PATH_TEMPLATE_HAS
+
+    bl_existe_index = os.path.isfile(path_index + '/index.html')
+    if not bl_existe_index:
+        ''' não existe o index '''
+        printC (Color.B_Red, "Index not found. I can't start webserver. ")
+        arr = os.listdir(path_index)
+        printC(Color.F_Magenta, path_index)
+        print(arr)
+    else:
+        # existe index
+        p = multiprocessing.Process(target=iniciaWebServerB, args=({"Something":"SomethingElese"},))
+        p.start()
+
+
+
+
 # APP START - Inicio
 
 print (Color.B_Blue + "********** " + MANUFACTURER + " " + APP_NAME + " v." + VERSAO + Color.B_Default)
@@ -1381,8 +1494,11 @@ log.debug ("PORTA secrets: " + ''.join(PORTA))
 
 # Pega dados do hass, se estiver nele.
 
+
 if DEVELOPERS_MODE:
     print (Color.B_Red, "DEVELOPERS_MODE", Color.B_Default)
+else:
+    print (Color.B_Blue, "NORMAL MODE", Color.B_Default)
 
 if IN_HASSIO:
     print (Color.B_Blue, "IN HASS.IO", Color.B_Default)
@@ -1444,10 +1560,17 @@ if SMSUPS_SERVER:
     if ENVIA_HASS:
         send_hass()
 
+if WEB_SERVER:  # se tiver webserver, inicia o web server
+    iniciaWebServer()
+
+
+printC(Color.B_LightCyan, 'Loop start!')
 # loop start
 while True:
     if SMSUPS_SERVER:  # só se for servidor
-        queryQ()  # Get UPS data
+        upsData = queryQ()  # Get UPS data
+        if WEB_SERVER:  # se tiver webserver, inicia o web server
+            dl.writeJsonFile(FILE_COMM, upsData)
         if ENVIA_HASS:   # verifica se vai enviar cabeçalho para HASS
             if (not gDevices_enviados['b']) and Connected and SMSUPS_SERVER:
                 send_hass
@@ -1467,6 +1590,11 @@ while True:
 
 time.sleep(2)
 ser.close()
+
+
+
+
+
 
 
 
