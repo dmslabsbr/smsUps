@@ -1,3 +1,6 @@
+*** 0.40 *** 
+- alpine3.122 correction.
+  
 *** 0.39 *** 
 - Sensors now are "state_class":"measurement"
 - No need to config MQTT user and password.
