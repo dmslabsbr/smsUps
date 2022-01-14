@@ -21,7 +21,7 @@ But you can use the application without using the Home Assistant. You just need 
 
 
 
-# Instructions
+# Instructions for use outside Home Assistant
 
 <img align="center" src="https://github.com/dmslabsbr/smsUps/raw/master/hass.io.png" alt="" width="30" /> [Home Assistant add-on instructions](DOCS.md)
 
@@ -31,8 +31,8 @@ Before run you need to install:
 
 ```bash
 git clone https://github.com/dmslabsbr/smsUps.git
-cd smsUps
 python3 -m venv ./smsUps/
+cd smsUps
 source ./bin/activate
 pip3 install paho-mqtt
 pip3 install pyserial

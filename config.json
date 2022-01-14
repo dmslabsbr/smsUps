@@ -1,6 +1,6 @@
 {
   "name": "SMS UPS BETA",
-  "version": "0.39j",
+  "version": "0.40",
   "slug": "hassio_sms_ups",
   "description": "Read data from SMS BRASIL UPS",
   "arch": ["armhf", "armv7", "aarch64", "amd64", "i386"],
