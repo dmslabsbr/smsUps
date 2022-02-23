@@ -7,7 +7,7 @@ date
 CONFIG_PATH=/data/options.json
 SYSTEM_USER=/data/system_user.json
 
-bashio::log.red "Exporting config data"
+bashio::log.red "Exporting config data..."
 
 #export MQTT_HOST=$(jq --raw-output '.MQTT_HOST' $CONFIG_PATH)
 #export MQTT_USER=$(jq --raw-output '.MQTT_USER' $CONFIG_PATH)
@@ -45,6 +45,9 @@ pwd
 bashio::log.green MQTT_HOST - $MQTT_HOST
 bashio::log.green MQTT_PASS - $MQTT_PASS
 
+bashio::log.blue "Serial ports"
+ls /dev/serial/by-id/ -la
+lsusb
 
 if [ -e "secrets.ini" ]; then
     bashio::log.info "secrets.ini exists!"

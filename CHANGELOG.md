@@ -1,3 +1,8 @@
+*** 0.40a *** 
+- Some serial improvements
+- Some bugs
+- removed webserver
+
 *** 0.40 *** 
 - alpine3.122 correction.
   
@@ -10,6 +15,3 @@
 - fix returned a non-zero code on install
 - Alpine 3.13 bug - now using 3.12
 
-*** TESTE CHANGELOG *** 
-
-Enviar msg quando o cliente chamar o shutdown

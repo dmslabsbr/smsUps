@@ -15,6 +15,8 @@ secrets.ini
 smsUPS.log
 .vscode/launch.json
 smsUPS/
+.DS_Store
+/.DS_Store
 
 # Distribution / packaging
 .Python
