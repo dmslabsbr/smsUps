@@ -11,8 +11,6 @@ if dl.IN_HASSIO():
 else:
     template_dir = os.path.abspath(comum.PATH_TEMPLATE)
 
-
-
 app = Flask(__name__, template_folder=template_dir)
 
 @app.route('/')

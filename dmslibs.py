@@ -1,4 +1,5 @@
 __author__ = 'dmslabs'
+__version__ = '2'
 
 # Commum methods and functions
 
@@ -9,7 +10,7 @@ import pathlib
 import socket
 import requests
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 
 # CONSTANTS
 # ARRUMAR aqui para não ficar na lib
@@ -49,6 +50,9 @@ MQTT_STATUS_CODE = {
 # VARS GLOBAIS
 _log = ''
 
+def version():
+    return __version__
+
 def log():
     return _log 
 
@@ -84,7 +88,7 @@ def getConfigParser(secrets_file):
     except Exception as e:
         _log.warning("Can't load config. Using default config.")
         print ("Can't load config. Using default config.")
-        mostraErro(e,20, "get_secrets")
+        mostraErro(e, 20, "get_secrets")
         # ver - INFO get_secrets / Error! Code: DuplicateOptionError, Message,
         #  While reading from 'secrets.ini' [line 22]: option 'log_file' in section 'config' 
         # already exists
@@ -98,6 +102,7 @@ def inicia_log(logFile, logName = "dmsLibs", stdOut = True, logLevel = logging.D
         _log = iniciaLoggerStdout()
     else:
         _log = iniciaLogger(logFile, logLevel, logName)
+    return _log
 
 
 def iniciaLoggerStdout():
@@ -399,6 +404,16 @@ def loadJsonFile(filePath, retDict = False):
     else:
         printC(Color.B_LightYellow, filePath + ' Do not exist')
     return jsonx
+
+def strDateTimeZone(str_datetime='', format='%Y-%m-%d %H:%M:%S', _tzinfo = ''):
+    ''' string to datetimezone'''
+    if _tzinfo=='':
+        _tzinfo=datetime.now(timezone.utc).astimezone().tzinfo # Local_TimeZone
+    if str_datetime=='' or str_datetime=='now': 
+        str_datetime=datetime.today().strftime(format)
+    str_datetime_obj = datetime.strptime(str_datetime, format)
+    str_datetime_obj = str_datetime_obj.replace(tzinfo=_tzinfo) # LOCAL_TIMEZONE
+    return str_datetime_obj
 
 
 # HASS.IO Functions

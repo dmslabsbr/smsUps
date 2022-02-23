@@ -1,5 +1,7 @@
+# -*- coding: utf-8 -*-
 __author__ = 'dmslabs'
 
+from ast import Pass
 import serial
 import time
 import struct
@@ -37,6 +39,7 @@ MQTT_USERNAME  = ""
 MQTT_PASSWORD  = ""
 # CONFIG CONFIG
 PORTA = '/dev/tty.usbserial-1470, /dev/tty.usbserial-1440, /dev/ttyUSB0'
+SERIAL_PORT_TIMEOUT = 10
 INTERVALO_MQTT = 120   #   How often to send data to the MQTT server?
 INTERVALO_HASS = 600   # How often to send device information in a format compatible with Home Asssistant MQTT discovery?
 INTERVALO_SERIAL = 3 # How often do I read UPS information on the serial port?
@@ -114,7 +117,7 @@ class Color:
     B_White = "\x1b[107m"
 
 # CONST
-VERSAO = '0.39j'
+VERSAO = '0.40aa1'
 CR = '0D'
 MANUFACTURER = 'dmslabs'
 VIA_DEVICE = 'smsUPS'
@@ -150,6 +153,7 @@ cmd = {'Q':"51 ff ff ff ff b3 0d",  # pega_dados "Q"
     }
 
 # GLOBAL VARS
+version_expected = {"dmslibs":2}
 Connected = False #global variable for the state of the connection
 gDevices_enviados = { 'b': False, 't':datetime.now() }  # Global - Controla quando enviar novamente o cabeçalho para autodiscovery
 gMqttEnviado = { 'b': False, 't':datetime.now() }  # Global - Controla quando publicar novamente
@@ -183,7 +187,8 @@ noBreak = {'lastinputVac':0,
     'BateriaEmUso': False,
     'publish_time': "",
     'info': "",
-    'name': ''}
+    'name': '',
+    'noData': True}
 
 gNoBreakLast = noBreak.copy()
 
@@ -731,7 +736,7 @@ def on_message(client, userdata, msg):
         BateriaEmUso = gNoBreakLast['BateriaEmUso']
         inputVac = int( gNoBreakLast['inputVac'] )
 
-        checkBatteryLevel2(client_bat_level, BateriaBaixa, BateriaBaixa, inputVac)
+        checkBatteryLevel2(client_bat_level, BateriaBaixa, BateriaBaixa, inputVac, False)
         return None
     if msg.topic == MQTT_PUB + "/json":
         # mudou o json
@@ -743,7 +748,7 @@ def on_message(client, userdata, msg):
         BateriaBaixa = res.get('BateriaBaixa')
         BateriaEmUso = res.get('BateriaEmUso')
         inputVac = int( res.get('inputVac') )
-        checkBatteryLevel2(client_bat_level, BateriaBaixa, BateriaEmUso, inputVac)
+        checkBatteryLevel2(client_bat_level, BateriaBaixa, BateriaEmUso, inputVac, False)
         if soCliente:
             # seta os dados de bateria
             gNoBreakLast['BateriaBaixa'] = str2bool(BateriaBaixa)
@@ -901,6 +906,7 @@ def toINT16(valorHex):
 def dadosNoBreak(lista):
     ''' Dados para as variaveis certas '''
     global noBreak
+    noBreak['noData']=False
     if lista is None:
         print ("No UPS Data")
         log.debug ("No UPS Data")
@@ -914,6 +920,7 @@ def dadosNoBreak(lista):
         lista[7] = "0"
         lista[8] = "FF"
         lista[9] = "FF"
+        noBreak['noData']=True
     noBreak['publish_time'] = datetime.today().strftime('%Y-%m-%d %H:%M:%S')
     noBreak['lastinputVac'] = toINT16(lista[1])/10
     noBreak['inputVac'] = toINT16(lista[2])/10
@@ -1080,6 +1087,9 @@ def queryQ(raw = ""):
         log.debug('x: ' + str(x))
         log.debug('deu erro queryQ')
         exit()
+    if upsData['noData']:
+        printC(Color.B_Red, 'no UPS Data')
+        exit()
     if gNoBreakLast['publish_time'] == '': gNoBreakLast = upsData.copy()
     if False: # ECHO
         print ('---------')
@@ -1122,9 +1132,9 @@ def checkBatteryLevel(upsData):
     global gBattery
     bat = int(upsData['batterylevel'])
     BateriaEmUso = upsData['BateriaEmUso']
-    if bat < UPS_BATERY_LEVEL and bat!=0:
+    if bat < UPS_BATERY_LEVEL and bat!=0 and not upsData['noData']:
         # bateria acabando.
-        checkBatteryLevel2(bat, upsData['BateriaBaixa'], BateriaEmUso, int(upsData['inputVac']) )
+        checkBatteryLevel2(bat, upsData['BateriaBaixa'], BateriaEmUso, int(upsData['inputVac'], upsData['noData']) )
         #if upsData['BateriaBaixa']=="on" or upsData['BateriaEmUso']=='on': # evita shutdown no pico de volta
         #    client.publish(MQTT_PUB + "/cmd", MQTT_CMD_SHUTDOWN )
     if IN_HASSIO:
@@ -1151,6 +1161,10 @@ def checkBatteryLevel(upsData):
                     "<BR><BR>" + "Battery level: **" + str(bat) + " %" + "**",
                     "<BR>" + "Shutdown battery level: **" + str(UPS_BATERY_LEVEL) + " %" + "**",
                     "<BR>" + "Estimated shutdown time in **" + str(timedelta(seconds=batLeft)) + "**"))
+                if upsData['noData']:
+                    tit = "No UPS Data!"
+                    msg = "".join(("No UPS data for **" + str(timedelta(seconds=time_dif)) + " seconds.**",
+                    "<BR><BR>" + "Please check seria/usb port: " + porta_atual))
         else:
             if not gBattery['time']== 0:
                 time_dif = date_diff_in_Seconds(datetime.now(), gBattery['time'])
@@ -1169,10 +1183,10 @@ def checkBatteryLevel(upsData):
             notifica_hass(titulo = titulo, msg = nova_msg, id = id)
 
 
-def checkBatteryLevel2(batterylevel, bateriaBaixa, bateriaEmUso, inputVac):
+def checkBatteryLevel2(batterylevel, bateriaBaixa, bateriaEmUso, inputVac, upsNoData):
     ''' Verifica o nível de bateria e chama o shutdown caso necessário '''
     bat = batterylevel
-    if bat < UPS_BATERY_LEVEL and bat!=0:
+    if bat < UPS_BATERY_LEVEL and bat!=0 and not upsNoData:
         # bateria acabando.
         log.warning ("Battery low " + str(bat) + "%")
         log.warning ("Input Vac " + str(inputVac) )
@@ -1267,6 +1281,26 @@ def send_hass():
     if DEVELOPERS_MODE:
         log.debug('Hass Sended')
 
+def serialExist(serialPort, imprime=True):
+    ''' verifica se uma porta serial existe no sistema - linux'''
+    osEnv = dl.dadosOS()
+    ret = False
+    if osEnv['os.name'] == 'posix':
+        import os
+        res = os.system("ls ".join(serialPort))
+        if res==0:
+            ret = True
+        else:
+            ret = False
+    else:
+        dl.printC(Color.B_Magenta, 'Error - Not linux system')
+        exit()
+    if imprime:
+        if ret:  
+            dl.printC(Color.B_Blue, ''.join(serialPort).join(' exist'))
+        else:
+            dl.printC(Color.B_Red, ''.join(serialPort).join(' not exist'))
+    return ret
 
 def abre_serial():
     ''' abre a porta serial '''
@@ -1275,19 +1309,27 @@ def abre_serial():
     global status
     global porta_atual
     porta_ser = PORTA[porta_atual].strip()
-
+    # lista as portas USB/serial
+    #try:
+    #    myports = [tuple(p) for p in list(serial.tools.list_ports.comports())]
+    #    printC(Color.B_Green, 'COMM Ports:')
+    #    print (myports)
+    #except Exception as e:
+    #    mostraErro(e, 40, "AbreSerial-ListaSerial")
     try:
         ser = serial.Serial(porta_ser,
             baudrate=2400,
             parity=serial.PARITY_NONE,
             stopbits=serial.STOPBITS_ONE,
             bytesize=serial.EIGHTBITS,
-            timeout = 1)
+            timeout = SERIAL_PORT_TIMEOUT)  # era 1
         print ("Porta: " + porta_ser + " - " + str(ser.isOpen()))
         log.info ("Port " + porta_ser + " - is open: " + str(ser.isOpen()))
+        printC (Color.F_Green, 'portstr: ' + ser.portstr)
         serialOk = ser.isOpen() # True
         status['serial'] = "open"
     except Exception as e:
+        # printC (Color.F_Red, 'portstr: ' + ser.portstr)  não está aberta a porta...
         if e.__class__.__name__ == 'SerialException':
             print (Color.F_Red + "I was unable to open the serial port ", porta_ser, Color.F_Default)
             log.warning ("I was unable to open the serial port " + porta_ser) 
@@ -1424,16 +1466,24 @@ def iniciaWebServerB(Conf):
     ''' inicia o webserver '''
     printC(Color.B_Blue,'Port: ' + str(os.getenv('PORT', 4443)))
     printC(Color.B_Blue,'Host: ' + str(os.getenv('IP', '0.0.0.0')))
-    if dl.IN_HASSIO():
-        webserver.app.run(debug=True,
-            host="0.0.0.0",
-            threaded=True
-        )
-    else:
-        webserver.app.run(debug=True,
-            host=os.getenv('IP', '0.0.0.0'), 
-            port=4567 # int(os.getenv('PORT', 4443)
-        )
+    webserver.app.run(debug=True, host="0.0.0.0", threaded=True)
+    if 1==0:
+        #TODO: arrumar
+        try:
+            if dl.IN_HASSIO():
+                webserver.app.run(debug=True,
+                    host="0.0.0.0",
+                    threaded=True
+                )
+            else:
+                webserver.app.run(debug=True,
+                    host=os.getenv('IP', '0.0.0.0'), 
+                    port=int(os.getenv('PORT', 5005))
+                )
+        except Exception as e:
+            printC(Color.F_Red, "Can't start Webserver")
+            mostraErro(e, 30, 'WARNING')
+            pass
 
 
 def iniciaWebServer():
@@ -1467,11 +1517,21 @@ print (Color.B_Green + "Starting up... " + datetime.today().strftime('%Y-%m-%d %
 # hass.io token
 IN_HASSIO = ( pegaEnv('HASSIO_TOKEN') != "" and PATH_ROOT == "/data")
 
+
+# version check
+if int(dl.version()) < int(version_expected['dmslibs']):
+    printC (Color.B_Red, "Wrong dmslibs version! ")
+    printC (Color.F_Blue, "Current: " + dl.version() )
+    printC (Color.F_Blue, "Expected: " + version_expected['dmslibs'] )
+
+
 #LOG
 if IN_HASSIO:
-    log = iniciaLoggerStdout()
+    #log = iniciaLoggerStdout()
+    log = dl.inicia_log(logFile='/var/tmp/hass.hoymiles.log', logName='hass.hoymiles', stdOut=True)
 else:
-    log = iniciaLogger()
+    #log = iniciaLogger()
+    log = dl.inicia_log(logFile='/var/tmp/hass.hoymiles.log', logName='hass.hoymiles', stdOut=False)
 
 log.debug("********** " + MANUFACTURER + " " + APP_NAME + " v." + VERSAO)
 log.debug("Starting up...")
@@ -1526,15 +1586,23 @@ print ("ALLOW_SHUTDOWN: " + Color.B_Red + str(ALLOW_SHUTDOWN) + Color.B_Default)
 
 # info
 try:
+    printC(Color.F_Blue, 'Getting OS Data')
     osEnv = os.environ
     log.info("os.name: " + str(os.name))
     log.info("os.getlogin: " + str(os.getlogin()))
     log.info("os.uname: " + str(os.uname()))
     log.info("whoami: " + str(os.popen('whoami').read()))
 except Exception as e:
+    printC(Color.F_Red, "Can't get OS Data")
     mostraErro(e, 10, 'info')
 # if 'VIRTUAL_ENV' in osEnv
 # log.info("VIRTUAL_ENV: " + osEnv['VIRTUAL_ENV'])
+
+# pega novamente os dados do SO (teste)
+dl.dadosOS() 
+
+# verifica a porta serial
+serialExist('/dev/ttyUSB0')
 
 # signals monitor
 signal.signal(signal.SIGTERM, sigterm_handler)
@@ -1561,7 +1629,8 @@ if SMSUPS_SERVER:
         send_hass()
 
 if WEB_SERVER:  # se tiver webserver, inicia o web server
-    iniciaWebServer()
+    printC(Color.F_LightBlue, "Web server outorder")
+    # iniciaWebServer()
 
 
 printC(Color.B_LightCyan, 'Loop start!')
@@ -1570,7 +1639,10 @@ while True:
     if SMSUPS_SERVER:  # só se for servidor
         upsData = queryQ()  # Get UPS data
         if WEB_SERVER:  # se tiver webserver, inicia o web server
-            dl.writeJsonFile(FILE_COMM, upsData)
+            try:
+                dl.writeJsonFile(FILE_COMM, upsData)
+            except Exception as e:
+                mostraErro(e, 30, "Webserver write json")
         if ENVIA_HASS:   # verifica se vai enviar cabeçalho para HASS
             if (not gDevices_enviados['b']) and Connected and SMSUPS_SERVER:
                 send_hass
