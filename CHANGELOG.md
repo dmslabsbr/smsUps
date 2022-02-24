@@ -1,3 +1,6 @@
+*** 0.42 *** 
+- Fix Device-tree error 
+
 *** 0.41 *** 
 - Some serial improvements
 - Some bugs

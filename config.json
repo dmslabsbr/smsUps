@@ -1,6 +1,6 @@
 {
   "name": "SMS UPS BETA",
-  "version": "0.41b",
+  "version": "0.42",
   "slug": "hassio_sms_ups",
   "description": "Read data from SMS BRASIL UPS",
   "arch": ["armhf", "armv7", "aarch64", "amd64", "i386"],
@@ -16,7 +16,7 @@
   "hassio_api": true,
   "homeassistant_api": true,
   "hassio_role": "manager",
-  "devicetree": true,
+  "devicetree": false,
   "devices": ["/dev/ttyUSB0", "/dev/ttyAMA0"],
   "webui": "[PROTO:use_ssl]://[HOST]:[PORT:5001]/",
   "services": [
