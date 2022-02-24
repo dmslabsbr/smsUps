@@ -27,5 +27,5 @@ But you can use the application without using the Home Assistant. You just need 
 
 # Instructions for use outside Home Assistant
 
-<img align="center" src="https://github.com/dmslabsbr/smsUps/raw/master/img/hass.io.png" alt="" width="30" /> [Instructions without HASS](noHass.md)
+[Instructions without HASS](noHass.md)
 
