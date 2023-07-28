@@ -1287,19 +1287,15 @@ def serialExist(serialPort, imprime=True):
     ret = False
     if osEnv['os.name'] == 'posix':
         import os
-        res = os.system("ls ".join(serialPort))
-        if res==0:
-            ret = True
-        else:
-            ret = False
+        ret = os.path.exists(serialPort)
     else:
         dl.printC(Color.B_Magenta, 'Error - Not linux system')
         exit()
     if imprime:
         if ret:  
-            dl.printC(Color.B_Blue, ''.join(serialPort).join(' exist'))
+            dl.printC(Color.B_Blue, ''.join(serialPort)+' exist')
         else:
-            dl.printC(Color.B_Red, ''.join(serialPort).join(' not exist'))
+            dl.printC(Color.B_Red, ''.join(serialPort)+' not exist')
     return ret
 
 def abre_serial():
